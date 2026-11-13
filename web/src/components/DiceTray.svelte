@@ -1,13 +1,14 @@
 <script lang="ts">
   import { tick } from 'svelte';
-  import { colorFor, type LogEntry } from '@ftt/shared';
+  import { colorFor, parseDice, type LogEntry } from '@ftt/shared';
   import type { TableSession } from '../lib/session/table.svelte';
   import RollView from './RollView.svelte';
 
-  // Bandeja de dados sobre o quadro: monta a rolagem e mostra só o histórico de rolagens.
+  // Bandeja de dados sobre o quadro: monta a rolagem, anima cada dado girando
+  // e caindo até o resultado, e mostra só o histórico de rolagens.
   let { session }: { session: TableSession } = $props();
 
-  const SIDES = [4, 6, 8, 10, 12, 20, 100];
+  const SIDES = [2, 3, 4, 6, 8, 10, 12, 20, 30, 100];
 
   let open = $state(false);
   let pool = $state<Record<number, number>>({});
@@ -16,12 +17,14 @@
   let priv = $state(false);
   let seen = $state(0);
   let listEl = $state<HTMLDivElement | null>(null);
+  let customSides = $state('');
 
   const rolls = $derived(session.log.filter((e) => e.kind === 'roll' || e.kind === 'table'));
   const unseen = $derived(Math.max(0, rolls.length - seen));
 
   const poolExpr = $derived.by(() => {
     const parts = SIDES.filter((s) => pool[s]).map((s) => `${pool[s]}d${s}`);
+    for (const s of Object.keys(pool).map(Number)) if (!SIDES.includes(s) && pool[s]) parts.push(`${pool[s]}d${s}`);
     if (mod) parts.push(String(mod));
     return parts.join('+').replace(/\+-/g, '-');
   });
@@ -37,13 +40,23 @@
     }
     if (open) {
       seen = n;
-      tick().then(() => listEl && (listEl.scrollTop = listEl.scrollHeight));
+      scrollDown();
     }
   });
 
+  function scrollDown() {
+    tick().then(() => listEl && (listEl.scrollTop = listEl.scrollHeight));
+  }
+
   function add(s: number) {
+    if (!Number.isInteger(s) || s < 2 || s > 1000) return;
     expr = '';
     pool[s] = Math.min(99, (pool[s] ?? 0) + 1);
+  }
+
+  function addCustom() {
+    add(parseInt(customSides, 10));
+    customSides = '';
   }
 
   function clear() {
@@ -52,9 +65,86 @@
     expr = '';
   }
 
+  // ---------- animação: cada dado rolado gira e cai até mostrar o número real ----------
+
+  interface Anim {
+    dice: number[];
+    mod: number;
+    startedAt: number;
+    settled: boolean;
+    values: number[];
+  }
+
+  let anim = $state<Anim | null>(null);
+  let spinTick = $state(0);
+  let spinTimer: ReturnType<typeof setInterval> | undefined;
+  let animTimeout: ReturnType<typeof setTimeout> | undefined;
+  let matchedId: string | null = null;
+
+  function startAnim(x: string) {
+    let dice: number[] = [];
+    let m = 0;
+    try {
+      for (const t of parseDice(x)) {
+        if (t.kind === 'num') m += t.sign * t.value;
+        else for (let i = 0; i < t.count; i++) dice.push(t.sides);
+      }
+    } catch {
+      return; // expressão livre inválida: o servidor recusa e mostra o aviso, sem animação
+    }
+    if (!dice.length) return;
+    clearInterval(spinTimer);
+    clearTimeout(animTimeout);
+    matchedId = null;
+    anim = { dice, mod: m, startedAt: performance.now(), settled: false, values: [] };
+    spinTimer = setInterval(() => (spinTick += 1), 90);
+    animTimeout = setTimeout(() => {
+      if (anim && !anim.settled) {
+        clearInterval(spinTimer);
+        anim = null;
+      }
+    }, 6000);
+    scrollDown();
+  }
+
+  function faceFor(sides: number, seed: number): number {
+    const h = (seed * 2654435761 + spinTick * 97) >>> 0;
+    return 1 + (h % sides);
+  }
+
+  function realDiceValues(entry: LogEntry): number[] {
+    const out: number[] = [];
+    if (!entry.roll) return out;
+    for (const p of entry.roll.parts) if (p.type === 'dice') for (const r of p.rolls) if (!r.exploded) out.push(r.value);
+    return out;
+  }
+
+  // Casa a próxima rolagem minha que chegar com a animação em andamento.
+  $effect(() => {
+    void session.log.length;
+    if (!anim || anim.settled) return;
+    const mine = session.role === 'gm' ? 'gm' : session.myPid;
+    const found = [...session.log]
+      .reverse()
+      .find((e) => e.kind === 'roll' && e.from === mine && e.id !== matchedId && e.ts + 800 >= anim!.startedAt);
+    if (!found) return;
+    matchedId = found.id;
+    const values = realDiceValues(found);
+    const wait = Math.max(0, 550 - (performance.now() - anim.startedAt));
+    clearTimeout(animTimeout);
+    setTimeout(() => {
+      if (!anim) return;
+      clearInterval(spinTimer);
+      anim = { ...anim, settled: true, values };
+      scrollDown();
+      setTimeout(() => (anim = null), 900);
+    }, wait);
+  });
+
   function roll(e?: string) {
     const x = e ?? current;
     if (!x) return;
+    startAnim(x);
     session.roll(x, priv);
     if (!e) clear();
   }
@@ -84,7 +174,7 @@
     </header>
 
     <div class="history" bind:this={listEl}>
-      {#if rolls.length === 0}
+      {#if rolls.length === 0 && !anim}
         <p class="muted empty">Nenhuma rolagem ainda.</p>
       {/if}
       {#each rolls.slice(-60) as e (e.id)}
@@ -103,6 +193,18 @@
           {/if}
         </div>
       {/each}
+      {#if anim}
+        <div class="entry anim-entry" aria-live="polite">
+          <div class="spin-row">
+            {#each anim.dice as sides, i (i)}
+              <span class="spin-die" class:settled={anim.settled} style:animation-delay="{i * 45}ms">
+                {anim.settled ? (anim.values[i] ?? faceFor(sides, i)) : faceFor(sides, i)}
+              </span>
+            {/each}
+            {#if anim.mod}<span class="spin-mod">{anim.mod > 0 ? '+' : ''}{anim.mod}</span>{/if}
+          </div>
+        </div>
+      {/if}
     </div>
 
     <div class="builder">
@@ -114,9 +216,21 @@
         {/each}
       </div>
       <div class="row">
+        <input
+          class="custom"
+          bind:value={customSides}
+          placeholder="outro (lados)"
+          inputmode="numeric"
+          maxlength="4"
+          aria-label="Lados de um dado personalizado"
+          onkeydown={(e) => e.key === 'Enter' && addCustom()}
+        />
+        <button class="ghost small" onclick={addCustom} disabled={!customSides.trim()}>+ dado</button>
         <button class="ghost tiny" onclick={() => (mod -= 1)} aria-label="Diminuir modificador">−</button>
         <span class="mod">{mod >= 0 ? '+' : ''}{mod}</span>
         <button class="ghost tiny" onclick={() => (mod += 1)} aria-label="Aumentar modificador">+</button>
+      </div>
+      <div class="row">
         <button class="ghost small" onclick={() => roll('adv')} title="2d20, fica o maior">vant</button>
         <button class="ghost small" onclick={() => roll('dis')} title="2d20, fica o menor">desv</button>
         <button class="ghost small" onclick={clear} disabled={!current}>limpar</button>
@@ -253,6 +367,59 @@
     margin-top: 3px;
     white-space: pre-wrap;
   }
+  .spin-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px;
+  }
+  .spin-die {
+    display: inline-grid;
+    place-items: center;
+    min-width: 28px;
+    height: 28px;
+    padding: 0 4px;
+    border-radius: 6px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    font-weight: 700;
+    font-size: 13px;
+    animation: dice-spin 0.5s linear infinite;
+  }
+  .spin-die.settled {
+    animation: dice-settle 0.45s ease-out;
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .spin-mod {
+    color: var(--muted);
+    font-weight: 600;
+  }
+  @keyframes dice-spin {
+    0% {
+      transform: translateY(-5px) rotate(0deg);
+    }
+    50% {
+      transform: translateY(3px) rotate(180deg);
+    }
+    100% {
+      transform: translateY(-5px) rotate(360deg);
+    }
+  }
+  @keyframes dice-settle {
+    0% {
+      transform: translateY(-16px) rotate(-30deg) scale(0.75);
+      opacity: 0.5;
+    }
+    60% {
+      transform: translateY(4px) rotate(10deg) scale(1.1);
+      opacity: 1;
+    }
+    100% {
+      transform: translateY(0) rotate(0deg) scale(1);
+    }
+  }
   .builder {
     border-top: 1px solid var(--border);
     padding: 10px 12px;
@@ -262,7 +429,7 @@
   }
   .dice {
     display: grid;
-    grid-template-columns: repeat(7, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: 4px;
   }
   .die {
@@ -288,12 +455,19 @@
     display: grid;
     place-items: center;
   }
+  .custom {
+    flex: 1;
+    min-width: 0;
+    padding: 5px 8px;
+    font-size: 12px;
+  }
   .tiny {
     padding: 2px 9px;
   }
   .small {
     padding: 4px 8px;
     font-size: 12px;
+    white-space: nowrap;
   }
   .mod {
     min-width: 28px;

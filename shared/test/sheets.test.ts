@@ -142,3 +142,13 @@ describe('v0.7.0', () => {
     expect(parsePlayerIntent({ ...ok, data: 'A'.repeat(300_000) })).toBeNull();
   });
 });
+
+describe('v0.8.0', () => {
+  it('jogador só mexe no próprio token', async () => {
+    const { playerOwnsItem } = await import('../src/board');
+    const tok = (owner?: string) => ({ type: 'token' as const, perm: { view: 'all', move: 'owner', edit: 'owner', owner } });
+    expect(playerOwnsItem('ana00000', tok('ana00000'))).toBe(true);
+    expect(playerOwnsItem('ana00000', tok('bia00000'))).toBe(false);
+    expect(playerOwnsItem('ana00000', { type: 'note', perm: { view: 'all', move: 'all', edit: 'all' } })).toBe(false);
+  });
+});
