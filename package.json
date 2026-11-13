@@ -1,0 +1,23 @@
+{
+  "name": "free-tabletop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "shared",
+    "relay",
+    "web"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w web",
+    "dev:relay": "npm run dev -w relay",
+    "build": "npm run build -w web",
+    "deploy:relay": "npm run deploy -w relay",
+    "test": "vitest run",
+    "check": "npm run check -w web && npm run typecheck -w relay"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  }
+}
