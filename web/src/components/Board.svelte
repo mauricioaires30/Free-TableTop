@@ -13,6 +13,7 @@
     onContext,
     onEdit,
     onSelect,
+    onToggleVisibility,
   }: {
     session: TableSession;
     gm?: GmSession | null;
@@ -22,13 +23,14 @@
     onContext: (id: string | null, x: number, y: number) => void;
     onEdit: (id: string) => void;
     onSelect: (id: string | null) => void;
+    onToggleVisibility: (id: string) => void;
   } = $props();
 
   let el: HTMLDivElement;
   let dropping = $state(false);
 
   $effect(() => {
-    const r = untrack(() => new BoardRenderer(el, session, { onContext, onEdit, onSelect }));
+    const r = untrack(() => new BoardRenderer(el, session, { onContext, onEdit, onSelect, onToggleVisibility }));
     renderer = r;
     return () => {
       r.destroy();

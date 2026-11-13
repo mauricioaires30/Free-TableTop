@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compactFog, DEFAULT_MAP, formatDistance, gridDistance, hexCenter, isFogShape, simplifyStroke, snapToGrid } from '../src/map';
+import { compactFog, DEFAULT_MAP, fogCovers, formatDistance, gridDistance, hexCenter, isFogShape, simplifyStroke, snapToGrid } from '../src/map';
 import { drawOrder, type BoardItem } from '../src/board';
 import { parsePlayerIntent } from '../src/protocol';
 
@@ -52,5 +52,36 @@ describe('mapa', () => {
       k: 'edit', id: 'abcd1234', patch: { conditions: ['Caído'] },
     });
     expect(parsePlayerIntent({ k: 'edit', id: 'abcd1234', patch: { conditions: 'Caído' } })).toBeNull();
+  });
+});
+
+describe('névoa bloqueia clique', () => {
+  const base = { enabled: true, shapes: [] as import('../src/map').FogShape[] };
+  it('sem névoa ligada nunca cobre', () => {
+    expect(fogCovers({ ...base, enabled: false }, 5, 5)).toBe(false);
+  });
+  it('tudo coberto por padrão quando ligada', () => {
+    expect(fogCovers(base, 5, 5)).toBe(true);
+  });
+  it('retângulo revelado deixa clicar só dentro dele', () => {
+    const fog = { ...base, shapes: [{ op: 'reveal' as const, kind: 'rect' as const, pts: [0, 0, 100, 100] }] };
+    expect(fogCovers(fog, 50, 50)).toBe(false);
+    expect(fogCovers(fog, 200, 200)).toBe(true);
+  });
+  it('um esconder depois de revelar volta a cobrir (ordem importa)', () => {
+    const fog = {
+      ...base,
+      shapes: [
+        { op: 'reveal' as const, kind: 'rect' as const, pts: [0, 0, 100, 100] },
+        { op: 'hide' as const, kind: 'rect' as const, pts: [20, 20, 30, 30] },
+      ],
+    };
+    expect(fogCovers(fog, 35, 35)).toBe(true);
+    expect(fogCovers(fog, 80, 80)).toBe(false);
+  });
+  it('pincel revela dentro do raio do traço', () => {
+    const fog = { ...base, shapes: [{ op: 'reveal' as const, kind: 'brush' as const, pts: [0, 0, 100, 0], r: 20 }] };
+    expect(fogCovers(fog, 50, 5)).toBe(false);
+    expect(fogCovers(fog, 50, 50)).toBe(true);
   });
 });

@@ -100,6 +100,13 @@
     }
   }
 
+  function toggleVisibility(id: string) {
+    const item = session.items.get(id);
+    if (!item || !gm) return;
+    const hidden = isHiddenFromPlayers(item);
+    gm.setPerm(item.id, { ...item.perm, view: hidden ? 'all' : 'gm' });
+  }
+
   function openEdit(id: string) {
     const item = session.items.get(id);
     if (!item || item.type === 'image' || !session.can('edit', item)) return;
@@ -169,7 +176,7 @@
         items.push(
           {
             label: hidden ? '👁️ Mostrar aos jogadores' : '🙈 Ocultar dos jogadores',
-            action: () => gm.setPerm(item.id, { ...item.perm, view: hidden ? 'all' : 'gm' }),
+            action: () => toggleVisibility(item.id),
             divider: item.type !== 'card',
           },
           { label: '🔐 Permissões…', action: () => (permItem = { ...item, perm: structuredClone($state.snapshot(item.perm)) }) },
@@ -238,6 +245,7 @@
         {onContext}
         onEdit={openEdit}
         onSelect={() => {}}
+        onToggleVisibility={toggleVisibility}
       />
       {#if !gm && session.status === 'online' && !session.gmOnline}
         <div class="banner">O mestre está offline. A mesa volta quando ele abrir a campanha.</div>
@@ -301,7 +309,15 @@
   {/if}
   {#if permItem && gm}
     {@const it = permItem}
-    <PermissionDialog {gm} perm={it.perm} onSave={(p) => gm.setPerm(it.id, p)} onClose={() => (permItem = null)} />
+    <PermissionDialog
+      {gm}
+      title="Quem pode ver"
+      perm={it.perm}
+      keys={['view']}
+      hints={{ view: it.type === 'token' ? 'Esconde o token dos jogadores (ex.: emboscada).' : 'Só o mestre move e edita; cada jogador só mexe no próprio token.' }}
+      onSave={(p) => gm.setPerm(it.id, p)}
+      onClose={() => (permItem = null)}
+    />
   {/if}
   {#each session.openSheets as id, i (id)}
     <SheetWindow

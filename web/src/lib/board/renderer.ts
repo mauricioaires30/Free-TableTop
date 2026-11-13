@@ -2,7 +2,7 @@
 // seleção, pan/zoom, régua, pings e cursores dos jogadores.
 import Konva from 'konva';
 import {
-  colorFor, drawOrder, formatDistance, gridDistance, hexCenter, hpOf, isHiddenFromPlayers, layerOf, rotateAroundCenter, snapToGrid,
+  colorFor, drawOrder, fogCovers, formatDistance, gridDistance, hexCenter, hpOf, isHiddenFromPlayers, layerOf, rotateAroundCenter, snapToGrid,
   TRANSFORM_FIELDS, type BoardItem, type FogShape, type TransformPatch,
 } from '@ftt/shared';
 import type { TableSession } from '../session/table.svelte';
@@ -11,6 +11,7 @@ export interface BoardCallbacks {
   onContext(id: string | null, clientX: number, clientY: number): void;
   onEdit(id: string): void;
   onSelect(id: string | null): void;
+  onToggleVisibility(id: string): void;
 }
 
 export type Tool = 'select' | 'ruler' | 'ping' | 'fog';
@@ -354,20 +355,23 @@ export class BoardRenderer {
     if (key === this.fogKey) return;
     this.fogKey = key;
     this.fogLayer.destroyChildren();
-    if (!f.enabled) return this.fogLayer.batchDraw();
-    this.fogLayer.opacity(this.s.role === 'gm' ? 0.45 : 1);
-    const full = () => new Konva.Rect({ x: -HUGE, y: -HUGE, width: HUGE * 2, height: HUGE * 2, fill: FOG_COLOR });
-    this.fogLayer.add(full());
-    for (const sh of f.shapes) {
-      const gco = sh.op === 'reveal' ? 'destination-out' : 'source-over';
-      let node: Konva.Shape;
-      if (sh.kind === 'all') node = full();
-      else if (sh.kind === 'rect') node = new Konva.Rect({ x: sh.pts[0], y: sh.pts[1], width: sh.pts[2], height: sh.pts[3], fill: FOG_COLOR });
-      else node = new Konva.Line({ points: sh.pts, stroke: FOG_COLOR, strokeWidth: (sh.r ?? 40) * 2, lineCap: 'round', lineJoin: 'round' });
-      node.globalCompositeOperation(gco);
-      this.fogLayer.add(node);
+    if (f.enabled) {
+      this.fogLayer.opacity(this.s.role === 'gm' ? 0.45 : 1);
+      const full = () => new Konva.Rect({ x: -HUGE, y: -HUGE, width: HUGE * 2, height: HUGE * 2, fill: FOG_COLOR });
+      this.fogLayer.add(full());
+      for (const sh of f.shapes) {
+        const gco = sh.op === 'reveal' ? 'destination-out' : 'source-over';
+        let node: Konva.Shape;
+        if (sh.kind === 'all') node = full();
+        else if (sh.kind === 'rect') node = new Konva.Rect({ x: sh.pts[0], y: sh.pts[1], width: sh.pts[2], height: sh.pts[3], fill: FOG_COLOR });
+        else node = new Konva.Line({ points: sh.pts, stroke: FOG_COLOR, strokeWidth: (sh.r ?? 40) * 2, lineCap: 'round', lineJoin: 'round' });
+        node.globalCompositeOperation(gco);
+        this.fogLayer.add(node);
+      }
     }
     this.fogLayer.batchDraw();
+    // A névoa muda quem pode clicar em cada item (jogadores não clicam no que está escondido).
+    this.sync();
   }
 
   // ---------- itens ----------
@@ -404,6 +408,12 @@ export class BoardRenderer {
 
   private canDrag(item: BoardItem) {
     return !item.locked && this.s.can('move', item);
+  }
+
+  /** Jogador não pode nem clicar no que está embaixo da névoa (o mestre vê e mexe normalmente). */
+  private blockedByFog(item: BoardItem): boolean {
+    if (this.s.role === 'gm') return false;
+    return fogCovers(this.s.map.fog, item.x + item.w / 2, item.y + item.h / 2);
   }
 
   sync() {
@@ -524,7 +534,9 @@ export class BoardRenderer {
 
   private update(g: Konva.Group, item: BoardItem) {
     const busy = this.dragging === item.id || this.transforming === item.id;
-    g.draggable(this.canDrag(item));
+    const blocked = !busy && this.blockedByFog(item);
+    g.listening(!blocked);
+    g.draggable(!blocked && this.canDrag(item));
     if (!busy) {
       g.position({ x: item.x, y: item.y });
       g.rotation(item.rotation);
@@ -594,6 +606,21 @@ export class BoardRenderer {
         new Konva.Tag({ fill: '#000', opacity: 0.7, cornerRadius: 4 }),
         new Konva.Text({ text: '👁 oculto dos jogadores', fontSize: 12, padding: 5, fill: '#ddd' }),
       ));
+    }
+    if (gm && (item.type === 'note' || item.type === 'card')) {
+      const eye = new Konva.Group({ x: 18, y: 18 });
+      eye.add(
+        new Konva.Circle({ radius: 11, fill: 'rgba(0,0,0,0.55)' }),
+        new Konva.Text({ text: hidden ? '🙈' : '👁', fontSize: 13, align: 'center', verticalAlign: 'middle', offsetX: 7, offsetY: 7, width: 14, height: 14 }),
+      );
+      eye.on('mousedown touchstart', (e) => {
+        e.cancelBubble = true; // não inicia o arrasto da nota/carta ao clicar no olho
+      });
+      eye.on('click tap', (e) => {
+        e.cancelBubble = true;
+        this.cb.onToggleVisibility(item.id);
+      });
+      g.add(eye);
     }
     if (gm && item.locked && layerOf(item) !== 'map') {
       g.add(new Konva.Text({ x: 4, y: 4, text: '📌', fontSize: 14 }));

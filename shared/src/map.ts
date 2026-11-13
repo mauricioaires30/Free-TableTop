@@ -94,6 +94,41 @@ export function formatDistance(cells: number, g: GridSettings): string {
   return `${n(c)} ${word}${g.unit ? ` · ${n(total)} ${g.unitLabel}` : ''}`;
 }
 
+function distToSegment(px: number, py: number, x1: number, y1: number, x2: number, y2: number): number {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const len2 = dx * dx + dy * dy;
+  let t = len2 > 0 ? ((px - x1) * dx + (py - y1) * dy) / len2 : 0;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+}
+
+function pointInFogShape(s: FogShape, x: number, y: number): boolean {
+  if (s.kind === 'all') return true;
+  if (s.kind === 'rect') {
+    const [rx, ry, rw, rh] = s.pts;
+    return x >= rx && x <= rx + rw && y >= ry && y <= ry + rh;
+  }
+  const r = s.r ?? 40;
+  for (let i = 0; i + 3 < s.pts.length; i += 2) {
+    if (distToSegment(x, y, s.pts[i], s.pts[i + 1], s.pts[i + 2], s.pts[i + 3]) <= r) return true;
+  }
+  return false;
+}
+
+/**
+ * Se a névoa cobre este ponto (pra quem não é o mestre). Usado para bloquear
+ * cliques em itens escondidos pela névoa, não só escondê-los visualmente.
+ */
+export function fogCovers(fog: FogSettings, x: number, y: number): boolean {
+  if (!fog.enabled) return false;
+  let covered = true;
+  for (const s of fog.shapes) {
+    if (pointInFogShape(s, x, y)) covered = s.op === 'hide';
+  }
+  return covered;
+}
+
 /** Descarta tudo o que veio antes de um "revelar/cobrir tudo" (não muda o resultado). */
 export function compactFog(shapes: FogShape[]): FogShape[] {
   let last = -1;
