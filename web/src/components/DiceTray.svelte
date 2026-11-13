@@ -1,6 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte';
-  import { colorFor, parseDice, type LogEntry } from '@ftt/shared';
+  import { colorFor, dieLabel, parseDice, type LogEntry } from '@ftt/shared';
   import type { TableSession } from '../lib/session/table.svelte';
   import RollView from './RollView.svelte';
 
@@ -68,11 +68,11 @@
   // ---------- animação: cada dado rolado gira e cai até mostrar o número real ----------
 
   interface Anim {
-    dice: number[];
+    dice: Array<{ sides: number; fate: boolean }>;
     mod: number;
     startedAt: number;
     settled: boolean;
-    values: number[];
+    values: string[];
   }
 
   let anim = $state<Anim | null>(null);
@@ -82,12 +82,12 @@
   let matchedId: string | null = null;
 
   function startAnim(x: string) {
-    let dice: number[] = [];
+    let dice: Anim['dice'] = [];
     let m = 0;
     try {
       for (const t of parseDice(x)) {
         if (t.kind === 'num') m += t.sign * t.value;
-        else for (let i = 0; i < t.count; i++) dice.push(t.sides);
+        else for (let i = 0; i < t.count; i++) dice.push({ sides: t.sides, fate: t.fate });
       }
     } catch {
       return; // expressão livre inválida: o servidor recusa e mostra o aviso, sem animação
@@ -107,15 +107,16 @@
     scrollDown();
   }
 
-  function faceFor(sides: number, seed: number): number {
+  function faceFor(d: { sides: number; fate: boolean }, seed: number): string {
     const h = (seed * 2654435761 + spinTick * 97) >>> 0;
-    return 1 + (h % sides);
+    const v = 1 + (h % d.sides);
+    return d.fate ? dieLabel({ fate: true }, v - 2) : String(v);
   }
 
-  function realDiceValues(entry: LogEntry): number[] {
-    const out: number[] = [];
+  function realDiceValues(entry: LogEntry): string[] {
+    const out: string[] = [];
     if (!entry.roll) return out;
-    for (const p of entry.roll.parts) if (p.type === 'dice') for (const r of p.rolls) if (!r.exploded) out.push(r.value);
+    for (const p of entry.roll.parts) if (p.type === 'dice') for (const r of p.rolls) if (!r.exploded) out.push(dieLabel(p, r.value));
     return out;
   }
 
@@ -196,9 +197,9 @@
       {#if anim}
         <div class="entry anim-entry" aria-live="polite">
           <div class="spin-row">
-            {#each anim.dice as sides, i (i)}
+            {#each anim.dice as d, i (i)}
               <span class="spin-die" class:settled={anim.settled} style:animation-delay="{i * 45}ms">
-                {anim.settled ? (anim.values[i] ?? faceFor(sides, i)) : faceFor(sides, i)}
+                {anim.settled ? (anim.values[i] ?? faceFor(d, i)) : faceFor(d, i)}
               </span>
             {/each}
             {#if anim.mod}<span class="spin-mod">{anim.mod > 0 ? '+' : ''}{anim.mod}</span>{/if}
@@ -238,7 +239,7 @@
       <div class="row">
         <input
           bind:value={expr}
-          placeholder={poolExpr || 'ex.: 4d6kh3, 1d20+5, 2d6!'}
+          placeholder={poolExpr || 'ex.: 1d20+5, 5d10>=8, 4dF, 1d100<=65'}
           maxlength="100"
           aria-label="Expressão de dados"
           onkeydown={(e) => e.key === 'Enter' && roll()}

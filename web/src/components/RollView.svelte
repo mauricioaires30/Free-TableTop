@@ -1,10 +1,11 @@
 <script lang="ts">
-  import type { RollResult } from '@ftt/shared';
+  import { dieLabel, isSuccessRoll, type RollResult } from '@ftt/shared';
 
   let { roll }: { roll: RollResult } = $props();
 
   const isCrit = (sides: number, v: number) => sides === 20 && v === 20;
   const isFumble = (sides: number, v: number) => sides === 20 && v === 1;
+  const successes = $derived(isSuccessRoll(roll));
 </script>
 
 <div class="roll">
@@ -19,16 +20,20 @@
           <span
             class="die"
             class:dropped={!d.kept}
-            class:crit={d.kept && isCrit(p.sides, d.value)}
-            class:fumble={d.kept && isFumble(p.sides, d.value)}
+            class:crit={!p.target && d.kept && isCrit(p.sides, d.value)}
+            class:fumble={!p.target && d.kept && isFumble(p.sides, d.value)}
+            class:hit={d.hit}
+            class:miss={!!p.target && d.kept && !d.hit}
             class:exploded={d.exploded}
-            title="d{p.sides}{d.exploded ? ' (explodiu)' : ''}{d.kept ? '' : ' (descartado)'}">{d.value}</span
+            title="{p.fate ? 'dF' : `d${p.sides}`}{d.exploded ? ' (explodiu)' : ''}{d.rerolled !== undefined ? ` (rerrolado, era ${d.rerolled})` : ''}{d.kept ? '' : ' (descartado)'}{d.hit ? ' (sucesso)' : ''}"
+            >{dieLabel(p, d.value)}</span
           >
         {/each}
       {/if}
     {/each}
     <span class="eq">=</span>
     <span class="total">{roll.total}</span>
+    {#if successes}<span class="succ">{roll.total === 1 ? 'sucesso' : 'sucessos'}</span>{/if}
   </div>
 </div>
 
@@ -80,6 +85,18 @@
   .die.fumble {
     border-color: var(--danger);
     color: #ff9a9a;
+  }
+  .die.hit {
+    border-color: var(--ok);
+    background: rgba(76, 175, 122, 0.18);
+    color: #8be0ae;
+  }
+  .die.miss {
+    opacity: 0.55;
+  }
+  .succ {
+    font-size: 12px;
+    color: var(--muted);
   }
   .die.exploded {
     border-style: dotted;
