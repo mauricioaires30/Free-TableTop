@@ -23,14 +23,6 @@ Mesa virtual de RPG grátis que roda no navegador. A campanha fica salva numa pa
 - **Filtro de palavras:** bloqueia ou censura palavrões, pegando acentos, `p0rr4`, `p.o.r.r.a` e letras repetidas. O mestre edita a lista.
 - **Moderação:** silenciar, expulsar e gerar um novo convite.
 
-## Hospede a sua
-O site roda no GitHub Pages. Um pequeno [Cloudflare Worker](relay/) gratuito repassa as mensagens entre os navegadores e não guarda nada da campanha.
-
-1. `npx wrangler login` e `npm run deploy:relay`.
-2. No repositório, crie a variável de Actions `RELAY_URL` com o endereço do worker usando `wss://` (por exemplo `wss://free-tabletop-relay.SUA-CONTA.workers.dev`).
-3. Em **Settings → Pages**, escolha **GitHub Actions** como fonte. Cada push na `main` publica o site.
-
-Para rodar localmente, use `npm install`, depois `npm run dev:relay` e `npm run dev`, e abra `localhost:5173/free-tabletop/`. Testes: `npm test`.
 
 ## Aviso
 A mesa só funciona enquanto o mestre estiver com a campanha aberta. Cada mestre é responsável pelo que é compartilhado na sua mesa. A névoa de guerra é visual: para esconder algo de verdade, use também as permissões.

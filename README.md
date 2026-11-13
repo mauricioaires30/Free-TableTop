@@ -23,14 +23,6 @@ A free virtual tabletop for RPGs that runs in the browser. Campaigns are saved i
 - **Word filter:** blocks or censors offensive words in Portuguese, including accents, `p0rr4`, `p.o.r.r.a` and repeated letters. The GM edits the list.
 - **Moderation:** mute, kick, and generate a new invite.
 
-## Host your own
-The site runs on GitHub Pages. A small free [Cloudflare Worker](relay/) relays messages between browsers and stores nothing from the campaign.
-
-1. `npx wrangler login` and `npm run deploy:relay`.
-2. In the repository, set the Actions variable `RELAY_URL` to the worker address using `wss://` (for example `wss://free-tabletop-relay.YOUR-ACCOUNT.workers.dev`).
-3. In **Settings → Pages**, choose **GitHub Actions** as the source. Every push to `main` publishes the site.
-
-To run it locally, use `npm install`, then `npm run dev:relay` and `npm run dev`, and open `localhost:5173/free-tabletop/`. Tests: `npm test`.
 
 ## Disclaimer
 The table only works while the GM has the campaign open. Each GM is responsible for the content shared at their table. The fog of war is visual: to truly hide something, also use permissions.
