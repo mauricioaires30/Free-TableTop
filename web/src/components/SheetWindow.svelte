@@ -1,5 +1,8 @@
 <script lang="ts">
-  import { attrModifier, can, colorFor, isResource, numericValue, type FieldValue, type ResourceValue, type TemplateField } from '@ftt/shared';
+  import {
+    attrModifier, can, colorFor, isPlayerSheet, isResource, numericValue,
+    type FieldValue, type ResourceValue, type TemplateField,
+  } from '@ftt/shared';
   import type { TableSession } from '../lib/session/table.svelte';
   import LiveInput from './LiveInput.svelte';
   import Avatar from './Avatar.svelte';
@@ -22,7 +25,10 @@
 
   const sheet = $derived(session.docs.sheets[id]);
   const tpl = $derived(sheet ? session.templateOf(sheet) : undefined);
-  const editable = $derived(!!sheet && can(session.actor, 'edit', sheet));
+  // Ficha de jogador é do dono: o mestre só vê, a menos que destrave para corrigir.
+  let unlocked = $state(false);
+  const gmLocked = $derived(!!sheet && session.role === 'gm' && isPlayerSheet(sheet));
+  const editable = $derived(!!sheet && can(session.actor, 'edit', sheet) && (!gmLocked || unlocked));
   const owner = $derived(sheet?.perm.owner);
 
   // Posição inicial em cascata; depois o usuário arrasta.
@@ -107,7 +113,19 @@
         <strong class="name">{sheet.name}</strong>
       {/if}
       {#if sheet.kind === 'npc'}<span class="badge">NPC</span>{/if}
-      {#if !editable}<span class="badge" title="Você só pode ver esta ficha">só leitura</span>{/if}
+      {#if gmLocked}
+        {#if unlocked}
+          <button class="ghost lock on" title="Voltar a só ver" onclick={() => (unlocked = false)}>✏️ corrigindo</button>
+        {:else}
+          <button
+            class="ghost lock"
+            title="Ficha de {session.nameOf(owner ?? '')}: quem mexe é o jogador. Destrave só para corrigir algo."
+            onclick={() => (unlocked = true)}>🔓 Corrigir</button
+          >
+        {/if}
+      {:else if !editable}
+        <span class="badge" title="Você só pode ver esta ficha">só leitura</span>
+      {/if}
       {#if onPerm}
         <button class="ghost icon" title="Permissões da ficha" onclick={() => onPerm(id)}>🔐</button>
       {/if}
@@ -250,6 +268,17 @@
   }
   .icon {
     padding: 3px 7px;
+  }
+  .lock {
+    font-size: 11px;
+    padding: 3px 8px;
+    white-space: nowrap;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+  }
+  .lock.on {
+    border-color: var(--warn);
+    color: var(--warn);
   }
   .body {
     overflow-y: auto;

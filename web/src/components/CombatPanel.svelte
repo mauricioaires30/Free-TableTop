@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { can, colorFor, hpOf, type CombatEntry } from '@ftt/shared';
+  import { can, colorFor, hpOf, isPlayerSheet, type CombatEntry, type Sheet } from '@ftt/shared';
   import type { TableSession } from '../lib/session/table.svelte';
   import type { GmSession } from '../lib/session/gm.svelte';
   import LiveInput from './LiveInput.svelte';
@@ -21,6 +21,12 @@
   let manualInit = $state(10);
   let manualHidden = $state(false);
   let dmg = $state<Record<string, string>>({});
+
+  /** Vida de personagem de jogador é com o dono; o resto é com o mestre. */
+  function canHp(s: Sheet): boolean {
+    if (isPlayerSheet(s)) return session.role !== 'gm' && can(session.actor, 'edit', s);
+    return can(session.actor, 'edit', s);
+  }
 
   function sheetOf(e: CombatEntry) {
     return e.sheetId ? session.docs.sheets[e.sheetId] : undefined;
@@ -118,7 +124,7 @@
           <div class="hpline">
             <div class="bar"><div style:width="{h.max > 0 ? Math.max(0, Math.min(100, (h.cur / h.max) * 100)) : 0}%"></div></div>
             <span class="hpnum">{h.cur}/{h.max}</span>
-            {#if s && can(session.actor, 'edit', s)}
+            {#if s && canHp(s)}
               <input class="dmg" inputmode="numeric" placeholder="±" aria-label="Valor de dano ou cura" bind:value={dmg[e.id]} onkeydown={(ev) => ev.key === 'Enter' && applyHp(e, false)} />
               <button class="ghost tiny" title="Causar dano" onclick={() => applyHp(e, false)}>−</button>
               <button class="ghost tiny" title="Curar" onclick={() => applyHp(e, true)}>+</button>
