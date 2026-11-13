@@ -76,10 +76,12 @@
     <p class="muted">Você (mestre) sempre pode tudo. Isto vale para os jogadores.</p>
 
     <div class="presets">
-      <button onclick={() => preset('public')}>Todos veem, só eu mexo</button>
+      <button onclick={() => preset('public')}>{keys.includes('move') ? 'Todos veem, só eu mexo' : 'Visível para todos'}</button>
       <button onclick={() => preset('hidden')}>Oculto</button>
-      <button onclick={() => preset('owner')}>Do dono</button>
-      <button onclick={() => preset('free')}>Livre para todos</button>
+      {#if keys.includes('move')}
+        <button onclick={() => preset('owner')}>Do dono</button>
+        <button onclick={() => preset('free')}>Livre para todos</button>
+      {/if}
     </div>
 
     {#each keys as key (key)}

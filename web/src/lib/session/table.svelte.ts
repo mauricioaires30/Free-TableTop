@@ -1,6 +1,6 @@
 // Estado comum da mesa (mestre e jogador) usado pela interface.
 import {
-  can, COLLECTIONS, DEFAULT_FILTER, DEFAULT_MAP, DEFAULT_SETTINGS, EMPTY_COMBAT,
+  can, COLLECTIONS, DEFAULT_FILTER, DEFAULT_MAP, DEFAULT_SETTINGS, EMPTY_COMBAT, playerOwnsItem,
   type Action, type Actor, type BoardItem, type Collection, type Combat, type DocMap, type EditPatch, type FieldValue,
   type FilterConfig, type LogEntry, type Peer, type Roster, type Sheet, type SheetTemplate, type TableSettings,
   type MapSettings, type TransformPatch,
@@ -78,7 +78,9 @@ export abstract class TableSession {
   }
 
   can(action: Action, item: BoardItem): boolean {
-    return can(this.actor, action, item);
+    if (action === 'view') return can(this.actor, 'view', item);
+    // Só o mestre mexe nos objetos do quadro; cada jogador mexe só no próprio token.
+    return this.role === 'gm' || playerOwnsItem(this.myPid, item);
   }
 
   nameOf(pid: string): string {

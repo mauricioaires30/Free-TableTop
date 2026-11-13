@@ -64,6 +64,11 @@ export function rotateAroundCenter(
   return { x: cx - o2.x, y: cy - o2.y, rotation };
 }
 
+/** Jogadores só mexem no próprio token (o resto do quadro é só do mestre). */
+export function playerOwnsItem(pid: string, item: Pick<BoardItem, 'type' | 'perm'>): boolean {
+  return item.type === 'token' && item.perm.owner === pid;
+}
+
 export function layerOf(item: BoardItem): Layer {
   return item.layer ?? (item.type === 'token' ? 'tokens' : 'objects');
 }

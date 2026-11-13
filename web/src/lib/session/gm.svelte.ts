@@ -5,7 +5,7 @@ import {
   FormulaError, itemForPlayer, logVisibleTo, newInvite, newItemId, parsePlayerIntent, PROTOCOL_VERSION,
   resolveFormula, rollDice, sanitizeValues, SHEET_PERM, sortEntries, stepTurn, TEMPLATE_PERM, TEMPLATE_PRESETS,
   TRANSFORM_FIELDS, WordFilter, DEFAULT_TABLES, TABLE_PERM, NOTE_PERM, rollTable as rollRandomTable, logToJournal,
-  MAX_NOTE_TEXT, AVATAR_SIDE, MAX_AVATAR_BYTES,
+  MAX_NOTE_TEXT, AVATAR_SIDE, MAX_AVATAR_BYTES, playerOwnsItem,
   type Actor, type AnyDoc, type BoardItem, type Collection, type Combat, type CombatEntry, type DocMap,
   type EditPatch, type FieldValue, type FilterConfig, type GmMessage, type LogEntry, type Peer, type Perm,
   type PlayerIntent, type RelayToClient, type Roster, type Sheet, type SheetTemplate, type TableSettings,
@@ -400,10 +400,11 @@ export class GmSession extends TableSession {
     this.saveBoard();
   }
 
-  private canAct(actor: Actor, action: 'move' | 'edit', item: BoardItem): boolean {
+  private canAct(actor: Actor, _action: 'move' | 'edit', item: BoardItem): boolean {
     if (actor.role === 'gm') return true;
     const r = this.roster[actor.pid];
-    return !!r && !r.banned && can(actor, action, item);
+    // Só o mestre mexe nos objetos do quadro; cada jogador mexe só no próprio token.
+    return !!r && !r.banned && playerOwnsItem(actor.pid, item);
   }
 
   // ---------- ações do mestre (interface) ----------
@@ -439,13 +440,20 @@ export class GmSession extends TableSession {
 
   addNote(x: number, y: number) {
     const color = NOTE_COLORS[Math.floor(Math.random() * NOTE_COLORS.length)];
-    return this.addItem({ type: 'note', x: x - 110, y: y - 90, w: 220, h: 180, text: 'Nova nota', color });
+    // Nota do mestre é privada por padrão; ele pode compartilhar depois (botão direito → Mostrar aos jogadores).
+    return this.addItem({
+      type: 'note', x: x - 110, y: y - 90, w: 220, h: 180, text: 'Nova nota', color,
+      perm: structuredClone(NOTE_PERM),
+    });
   }
 
   addCard(x: number, y: number) {
+    // Pista nasce totalmente privada (só o mestre vê que ela existe). Ele decide quando
+    // mostrar a frente aos jogadores; o verso continua secreto até "Revelar verso".
     return this.addItem({
       type: 'card', x: x - 130, y: y - 170, w: 260, h: 340,
       title: 'Pista', front: 'O que os jogadores veem.', back: 'O que só aparece quando você revelar.', revealed: false,
+      perm: structuredClone(NOTE_PERM),
     });
   }
 
