@@ -1,8 +1,8 @@
 // Formato dos arquivos da campanha na pasta do mestre.
 import {
-  COLLECTION_DIRS, DEFAULT_FILTER, DEFAULT_SETTINGS, EMPTY_COMBAT, newGmKey, newInvite, newRoomId,
+  COLLECTION_DIRS, DEFAULT_FILTER, DEFAULT_MAP, DEFAULT_SETTINGS, EMPTY_COMBAT, isFogShape, newGmKey, newInvite, newRoomId,
   type AnyDoc, type BoardItem, type Collection, type Combat, type FilterConfig, type LogEntry, type Roster,
-  type TableSettings,
+  type MapSettings, type TableSettings,
 } from '@ftt/shared';
 import type { CampaignStore } from './store';
 
@@ -25,6 +25,7 @@ export interface CampaignFile {
 export interface BoardFile {
   version: 1;
   items: BoardItem[];
+  map?: MapSettings;
 }
 
 export const PATHS = {
@@ -63,7 +64,7 @@ export async function readCampaign(store: CampaignStore): Promise<CampaignFile |
 export async function readBoard(store: CampaignStore): Promise<BoardItem[]> {
   const txt = await store.readText(PATHS.board);
   if (!txt) return [];
-  const DEF = { note: [220, 180], card: [260, 340], image: [300, 300] } as const;
+  const DEF = { note: [220, 180], card: [260, 340], image: [300, 300], token: [70, 70] } as const;
   const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
   return ((JSON.parse(txt) as BoardFile).items ?? [])
     .filter((i) => i && typeof i.id === 'string' && i.type in DEF && i.perm)
@@ -168,4 +169,20 @@ export async function readCombat(store: CampaignStore): Promise<Combat> {
     /* arquivo inválido: começa vazio */
   }
   return structuredClone(EMPTY_COMBAT);
+}
+
+export async function readMap(store: CampaignStore): Promise<MapSettings> {
+  const map = structuredClone(DEFAULT_MAP);
+  try {
+    const txt = await store.readText(PATHS.board);
+    const m = txt ? (JSON.parse(txt) as BoardFile).map : undefined;
+    if (m) {
+      Object.assign(map.grid, m.grid ?? {});
+      map.fog.enabled = !!m.fog?.enabled;
+      map.fog.shapes = (m.fog?.shapes ?? []).filter(isFogShape);
+    }
+  } catch {
+    /* quadro sem mapa */
+  }
+  return map;
 }

@@ -7,3 +7,4 @@ export * from './protocol';
 export * from './sheets';
 export * from './combat';
 export * from './docs';
+export * from './map';

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte';
-  import { BoardRenderer } from '../lib/board/renderer';
+  import { BoardRenderer, type FogBrush, type Tool } from '../lib/board/renderer';
   import type { TableSession } from '../lib/session/table.svelte';
   import type { GmSession } from '../lib/session/gm.svelte';
 
@@ -8,6 +8,8 @@
     session,
     gm = null,
     renderer = $bindable(null),
+    tool = 'select',
+    fogBrush,
     onContext,
     onEdit,
     onSelect,
@@ -15,6 +17,8 @@
     session: TableSession;
     gm?: GmSession | null;
     renderer?: BoardRenderer | null;
+    tool?: Tool;
+    fogBrush: FogBrush;
     onContext: (id: string | null, x: number, y: number) => void;
     onEdit: (id: string) => void;
     onSelect: (id: string | null) => void;
@@ -35,6 +39,20 @@
   $effect(() => {
     void session.itemsVersion;
     untrack(() => renderer?.sync());
+  });
+
+  // Grid e névoa: qualquer mudança no mapa redesenha.
+  $effect(() => {
+    void JSON.stringify(session.map.grid);
+    void session.map.fog.enabled;
+    void session.map.fog.shapes.length;
+    untrack(() => renderer?.syncMap());
+  });
+
+  $effect(() => {
+    const t = tool;
+    const b = { ...fogBrush };
+    untrack(() => renderer?.setTool(t, b));
   });
 
   function onDragOver(e: DragEvent) {
@@ -106,6 +124,9 @@
       linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
     overflow: hidden;
     touch-action: none;
+  }
+  .board:global(.mapgrid) {
+    background-image: none;
   }
   .board.dropping {
     outline: 3px dashed var(--accent-2);

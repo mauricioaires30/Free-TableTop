@@ -8,11 +8,13 @@
     gm = null,
     onTemplates,
     onPerm,
+    onPlace,
   }: {
     session: TableSession;
     gm?: GmSession | null;
     onTemplates: () => void;
     onPerm: (id: string) => void;
+    onPlace: (id: string) => void;
   } = $props();
 
   const templates = $derived(Object.values(session.docs.templates).sort((a, b) => a.name.localeCompare(b.name)));
@@ -77,6 +79,7 @@
       {/if}
     </button>
     {#if gm}
+      <button class="ghost small" title="Colocar token no mapa" onclick={() => onPlace(s.id)}>🪙</button>
       <button class="ghost small" title="Permissões" onclick={() => onPerm(s.id)}>🔐</button>
       <button class="ghost small" title="Duplicar" onclick={() => gm.duplicateSheet(s.id)}>📄</button>
       <button class="ghost small danger" title="Apagar" onclick={() => remove(s)}>🗑</button>

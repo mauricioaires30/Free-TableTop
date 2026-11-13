@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { colorFor, isHiddenFromPlayers, type BoardItem } from '@ftt/shared';
+  import { colorFor, isHiddenFromPlayers, LAYER_LABELS, LAYERS, layerOf, type BoardItem } from '@ftt/shared';
   import type { TableSession } from '../lib/session/table.svelte';
   import type { GmSession } from '../lib/session/gm.svelte';
-  import type { BoardRenderer } from '../lib/board/renderer';
+  import type { BoardRenderer, FogBrush, Tool } from '../lib/board/renderer';
   import { go } from '../lib/router.svelte';
   import Board from '../components/Board.svelte';
   import ChatPanel from '../components/ChatPanel.svelte';
@@ -16,6 +16,8 @@
   import SheetWindow from '../components/SheetWindow.svelte';
   import TemplateEditor from '../components/TemplateEditor.svelte';
   import CombatPanel from '../components/CombatPanel.svelte';
+  import ToolPalette from '../components/ToolPalette.svelte';
+  import TokenDialog from '../components/TokenDialog.svelte';
 
   let { session, gm = null, onLeave }: { session: TableSession; gm?: GmSession | null; onLeave?: () => void } = $props();
 
@@ -23,6 +25,11 @@
   if (import.meta.env.DEV) (window as unknown as { __ftt: unknown }).__ftt = session;
 
   let renderer = $state<BoardRenderer | null>(null);
+  let tool = $state<Tool>('select');
+  let fogBrush = $state<FogBrush>({ op: 'reveal', shape: 'rect', r: 60 });
+  let tokenEditing = $state<BoardItem | null>(null);
+  /** O seletor de arquivo serve para imagens novas ou para a imagem de um token. */
+  let tokenImageFor: string | null = null;
   type Tab = 'chat' | 'sheets' | 'combat' | 'players' | 'settings';
   let tab = $state<Tab>('chat');
   let showTemplates = $state(false);
@@ -58,12 +65,30 @@
 
   function pickImage(pos?: { x: number; y: number }) {
     pendingImagePos = pos ?? null;
+    tokenImageFor = null;
+    fileInput.multiple = true;
     fileInput.click();
+  }
+
+  function pickTokenImage(id: string) {
+    tokenImageFor = id;
+    fileInput.multiple = false;
+    fileInput.click();
+  }
+
+  function placeSheet(sheetId: string) {
+    const c = center();
+    gm?.addToken(c.x, c.y, { sheetId });
   }
 
   async function onFile() {
     const files = [...(fileInput.files ?? [])];
     fileInput.value = '';
+    if (tokenImageFor) {
+      if (files[0]) await gm?.setTokenImage(tokenImageFor, files[0]);
+      tokenImageFor = null;
+      return;
+    }
     let p = pendingImagePos ?? center();
     for (const f of files) {
       await gm?.addImage(f, p.x, p.y);
@@ -74,7 +99,8 @@
   function openEdit(id: string) {
     const item = session.items.get(id);
     if (!item || item.type === 'image' || !session.can('edit', item)) return;
-    editing = { ...item };
+    if (item.type === 'token') tokenEditing = $state.snapshot(item) as BoardItem;
+    else editing = { ...item };
   }
 
   function onContext(id: string | null, cx: number, cy: number) {
@@ -87,11 +113,17 @@
           { label: '📝 Nova nota aqui', action: () => gm.addNote(p.x, p.y) },
           { label: '🃏 Nova carta aqui', action: () => gm.addCard(p.x, p.y) },
           { label: '🖼️ Imagem aqui…', action: () => pickImage(p) },
+          { label: '🪙 Token aqui', action: () => gm.addToken(p.x, p.y) },
         );
       }
       items.push({ label: '🔍 Ver tudo', action: () => renderer?.fitAll(), divider: !!gm });
     } else {
-      if (item.type !== 'image' && session.can('edit', item)) items.push({ label: '✏️ Editar', action: () => openEdit(item.id) });
+      if (item.type !== 'image' && session.can('edit', item)) {
+        items.push({ label: item.type === 'token' ? '✏️ Nome e condições' : '✏️ Editar', action: () => openEdit(item.id) });
+      }
+      if (item.type === 'token' && item.sheetId && session.docs.sheets[item.sheetId]) {
+        items.push({ label: '📜 Abrir ficha', action: () => session.openSheet(item.sheetId!) });
+      }
       if (session.can('move', item)) {
         items.push(
           { label: '⬆️ Trazer para frente', action: () => session.zorder(item.id, 'front') },
@@ -106,6 +138,15 @@
             divider: true,
           });
         }
+        if (item.type === 'token') items.push({ label: '🖼️ Imagem do token…', action: () => pickTokenImage(item.id), divider: true });
+        const cur = layerOf(item);
+        for (const l of LAYERS) {
+          if (l !== cur) items.push({ label: `↕ Mover para: ${LAYER_LABELS[l]}`, action: () => gm.setLayer(item.id, l) });
+        }
+        items.push({
+          label: item.locked ? '🔓 Destravar' : '📌 Travar no lugar',
+          action: () => gm.updateItem(item.id, { locked: item.locked ? undefined : true }),
+        });
         const hidden = isHiddenFromPlayers(item);
         items.push(
           {
@@ -173,6 +214,8 @@
       <Board
         {session}
         {gm}
+        {tool}
+        {fogBrush}
         bind:renderer
         {onContext}
         onEdit={openEdit}
@@ -181,6 +224,7 @@
       {#if !gm && session.status === 'online' && !session.gmOnline}
         <div class="banner">O mestre está offline. A mesa volta quando ele abrir a campanha.</div>
       {/if}
+      <ToolPalette bind:tool bind:fogBrush {gm} />
       <div class="zoom">
         <button onclick={() => renderer?.zoomBy(1.25)} aria-label="Aproximar">＋</button>
         <button onclick={() => renderer?.zoomBy(0.8)} aria-label="Afastar">－</button>
@@ -209,7 +253,7 @@
           {#if tab === 'chat'}
             <ChatPanel {session} />
           {:else if tab === 'sheets'}
-            <SheetsPanel {session} {gm} onTemplates={() => (showTemplates = true)} onPerm={(id) => (permSheet = id)} />
+            <SheetsPanel {session} {gm} onTemplates={() => (showTemplates = true)} onPerm={(id) => (permSheet = id)} onPlace={placeSheet} />
           {:else if tab === 'combat'}
             <CombatPanel {session} {gm} />
           {:else if tab === 'players'}
@@ -226,6 +270,9 @@
 
   {#if menu}
     <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => (menu = null)} />
+  {/if}
+  {#if tokenEditing}
+    <TokenDialog {session} {gm} item={tokenEditing} onClose={() => (tokenEditing = null)} />
   {/if}
   {#if editing}
     <EditDialog {session} item={editing} onClose={() => (editing = null)} />

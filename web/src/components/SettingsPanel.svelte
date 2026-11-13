@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { DEFAULT_BAD_WORDS } from '@ftt/shared';
+  import { DEFAULT_BAD_WORDS, type GridSettings } from '@ftt/shared';
   import type { GmSession } from '../lib/session/gm.svelte';
   import InviteBox from './InviteBox.svelte';
 
@@ -20,12 +20,59 @@
   function restore() {
     words = DEFAULT_BAD_WORDS.join('\n');
   }
+
+  function grid(patch: Partial<GridSettings>) {
+    gm.setGrid({ ...($state.snapshot(gm.map.grid) as GridSettings), ...patch });
+  }
 </script>
 
 <div class="panel">
   <section>
     <h3>Convite</h3>
     <InviteBox {gm} />
+  </section>
+
+  <section>
+    <h3>Mapa</h3>
+    <label class="check">
+      <input type="checkbox" checked={gm.map.grid.enabled} onchange={(e) => grid({ enabled: e.currentTarget.checked })} />
+      Mostrar grid
+    </label>
+    {#if gm.map.grid.enabled}
+      <div class="grid2">
+        <div>
+          <label for="gt">Tipo</label>
+          <select id="gt" value={gm.map.grid.type} onchange={(e) => grid({ type: e.currentTarget.value as GridSettings['type'] })}>
+            <option value="square">Quadrado</option>
+            <option value="hex">Hexagonal</option>
+          </select>
+        </div>
+        <div>
+          <label for="gs">Tamanho da célula (px)</label>
+          <input id="gs" type="number" min="20" max="400" value={gm.map.grid.size} onchange={(e) => grid({ size: Math.max(20, Math.min(400, Number(e.currentTarget.value) || 70)) })} />
+        </div>
+        <div>
+          <label for="gu">Cada célula vale</label>
+          <input id="gu" type="number" step="0.5" min="0" value={gm.map.grid.unit} onchange={(e) => grid({ unit: Number(e.currentTarget.value) || 0 })} />
+        </div>
+        <div>
+          <label for="gl">Unidade</label>
+          <input id="gl" value={gm.map.grid.unitLabel} maxlength="8" onchange={(e) => grid({ unitLabel: e.currentTarget.value.trim() || 'm' })} />
+        </div>
+        <div>
+          <label for="gc">Cor</label>
+          <input id="gc" type="color" value={gm.map.grid.color} onchange={(e) => grid({ color: e.currentTarget.value })} />
+        </div>
+        <div>
+          <label for="go">Opacidade</label>
+          <input id="go" type="range" min="0.05" max="0.8" step="0.05" value={gm.map.grid.opacity} onchange={(e) => grid({ opacity: Number(e.currentTarget.value) })} />
+        </div>
+      </div>
+      <label class="check"><input type="checkbox" checked={gm.map.grid.snap} onchange={(e) => grid({ snap: e.currentTarget.checked })} /> Tokens encaixam no grid</label>
+    {/if}
+    <p class="muted small">
+      Dica: coloque a imagem do mapa na camada "Mapa (fundo)" e trave (botão direito). Ajuste o tamanho da célula até bater com o desenho.
+    </p>
   </section>
 
   <section>
@@ -95,6 +142,22 @@
     color: var(--text);
     font-size: 13px;
     cursor: pointer;
+  }
+  .grid2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 10px;
+  }
+  input[type='color'] {
+    width: 100%;
+    height: 34px;
+    padding: 2px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  input[type='range'] {
+    width: 100%;
   }
   textarea {
     font-family: ui-monospace, monospace;

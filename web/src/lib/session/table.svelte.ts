@@ -1,9 +1,9 @@
 // Estado comum da mesa (mestre e jogador) usado pela interface.
 import {
-  can, COLLECTIONS, DEFAULT_FILTER, DEFAULT_SETTINGS, EMPTY_COMBAT,
+  can, COLLECTIONS, DEFAULT_FILTER, DEFAULT_MAP, DEFAULT_SETTINGS, EMPTY_COMBAT,
   type Action, type Actor, type BoardItem, type Collection, type Combat, type DocMap, type EditPatch, type FieldValue,
   type FilterConfig, type LogEntry, type Peer, type Roster, type Sheet, type SheetTemplate, type TableSettings,
-  type TransformPatch,
+  type MapSettings, type TransformPatch,
 } from '@ftt/shared';
 import type { NetStatus } from '../net/client';
 import type { ImageSource } from '../images/images';
@@ -14,6 +14,18 @@ export interface CursorState {
   tx: number;
   ty: number;
   last: number;
+}
+
+export interface Ruler {
+  pts: number[];
+  last: number;
+}
+
+export interface Ping {
+  pid: string;
+  x: number;
+  y: number;
+  start: number;
 }
 
 export interface Toast {
@@ -47,6 +59,10 @@ export abstract class TableSession {
   docs = $state<Docs>(emptyDocs());
   combat = $state<Combat>(structuredClone(EMPTY_COMBAT));
   settings = $state<TableSettings>({ ...DEFAULT_SETTINGS });
+  map = $state<MapSettings>(structuredClone(DEFAULT_MAP));
+  /** Réguas e pings dos outros (desenhados pelo quadro, fora do estado reativo). */
+  rulers = new Map<string, Ruler>();
+  pings: Ping[] = [];
   /** Fichas abertas como janelas sobre o quadro (só interface). */
   openSheets = $state<string[]>([]);
 
@@ -137,6 +153,19 @@ export abstract class TableSession {
   abstract setSheet(id: string, values: Record<string, FieldValue>, name?: string): void;
   abstract rollSheet(id: string, field: string, priv: boolean): void;
   abstract rollInitiative(sheetId: string): void;
+  abstract sendRuler(pts: number[] | null): void;
+  abstract ping(x: number, y: number): void;
   sendCursor(_x: number, _y: number): void {}
+
+  protected onRuler(pid: string, pts: number[] | null) {
+    if (pid === this.myPid) return;
+    if (pts) this.rulers.set(pid, { pts, last: performance.now() });
+    else this.rulers.delete(pid);
+  }
+
+  protected onPing(pid: string, x: number, y: number) {
+    this.pings.push({ pid, x, y, start: performance.now() });
+    if (this.pings.length > 20) this.pings.shift();
+  }
   abstract destroy(): void;
 }

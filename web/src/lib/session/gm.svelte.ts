@@ -1,20 +1,21 @@
 // Sessão do mestre: é a autoridade da mesa. Valida tudo o que os jogadores pedem,
 // rola os dados, salva na pasta e envia a cada jogador só o que ele pode ver.
 import {
-  applyFilter, can, COLLECTIONS, combatForPlayer, defaultValues, DEFAULT_ITEM_PERM, DiceError, docForPlayer,
+  applyFilter, can, COLLECTIONS, compactFog, DEFAULT_MAP, simplifyStroke, combatForPlayer, defaultValues, DEFAULT_ITEM_PERM, DiceError, docForPlayer,
   FormulaError, itemForPlayer, logVisibleTo, newInvite, newItemId, parsePlayerIntent, PROTOCOL_VERSION,
   resolveFormula, rollDice, sanitizeValues, SHEET_PERM, sortEntries, stepTurn, TEMPLATE_PERM, TEMPLATE_PRESETS,
   TRANSFORM_FIELDS, WordFilter,
   type Actor, type AnyDoc, type BoardItem, type Collection, type Combat, type CombatEntry, type DocMap,
   type EditPatch, type FieldValue, type FilterConfig, type GmMessage, type LogEntry, type Peer, type Perm,
   type PlayerIntent, type RelayToClient, type Roster, type Sheet, type SheetTemplate, type TableSettings,
-  type TransformPatch,
+  type FogShape, type GridSettings, type Layer, type MapSettings, type TransformPatch,
 } from '@ftt/shared';
 import { RelayClient } from '../net/client';
 import { GmImages, processImage } from '../images/images';
+import { snapToGrid } from '@ftt/shared';
 import { inviteUrl, roomSocketUrl } from '../config';
 import {
-  docPath, PATHS, readBoard, readCampaign, readCombat, readDocs, readRecentLog, Saver, todayKey, type CampaignFile,
+  docPath, PATHS, readBoard, readCampaign, readMap, readCombat, readDocs, readRecentLog, Saver, todayKey, type CampaignFile,
 } from '../storage/campaign';
 import type { CampaignStore } from '../storage/store';
 import { emptyDocs, TableSession, type Docs } from './table.svelte';
@@ -52,7 +53,8 @@ export class GmSession extends TableSession {
       for (const d of await readDocs(store, col)) (docs[col] as Record<string, AnyDoc>)[d.id] = d;
     }
     const combat = await readCombat(store);
-    const s = new GmSession(store, campaign, items, recent, today, docs, combat);
+    const map = await readMap(store);
+    const s = new GmSession(store, campaign, items, recent, today, docs, combat, map);
     if (!campaign.seeded) s.seedTemplates();
     return s;
   }
@@ -65,9 +67,11 @@ export class GmSession extends TableSession {
     todayLog: LogEntry[],
     docs: Docs,
     combat: Combat,
+    map: MapSettings,
   ) {
     super();
     this.docs = docs;
+    this.map = map;
     this.combat = combat;
     this.settings = campaign.settings!;
     this.roomId = campaign.roomId;
@@ -200,6 +204,11 @@ export class GmSession extends TableSession {
         return this.doSheetRoll(actor, d.id, d.field, d.priv);
       case 'initRoll':
         return this.doInitRoll(actor, d.sheetId);
+      case 'ruler':
+        this.onRuler(pid, d.pts);
+        return this.broadcast({ k: 'ruler', pid, pts: d.pts });
+      case 'ping':
+        return this.ping2(pid, d.x, d.y);
     }
   }
 
@@ -209,7 +218,7 @@ export class GmSession extends TableSession {
     let log = $state.snapshot(this.log).filter((e) => logVisibleTo(e, pid)).slice(-150);
     const msg = (): GmMessage => ({
       k: 'snapshot', campaign: this.campaignName, items, log, roster: this.publicRoster(), filter: $state.snapshot(this.filter),
-      combat: this.combatFor(pid), settings: $state.snapshot(this.settings),
+      combat: this.combatFor(pid), settings: $state.snapshot(this.settings), map: $state.snapshot(this.map),
     });
     // Garante que o snapshot cabe numa mensagem do relay.
     while (log.length > 10 && JSON.stringify(msg()).length > 500_000) log = log.slice(Math.floor(log.length / 2));
@@ -353,7 +362,7 @@ export class GmSession extends TableSession {
     if (!item || !this.canAct(actor, 'edit', item)) return this.refuse(actor, item);
     const clean: GmPatch = { ...patch };
     if (actor.role === 'player') {
-      for (const f of ['text', 'title', 'front'] as const) {
+      for (const f of ['text', 'title', 'front', 'name'] as const) {
         const v = clean[f];
         if (v === undefined) continue;
         const r = applyFilter(this.filter, v, this.wf);
@@ -522,6 +531,7 @@ export class GmSession extends TableSession {
   // ---------- documentos: modelos e fichas ----------
 
   private saveDoc(col: Collection, id: string) {
+    if (col === 'sheets') this.bump();
     this.saver.schedule(`${col}/${id}`, async () => {
       const d = this.docs[col][id];
       if (d) await this.store.writeText(docPath(col, id), JSON.stringify($state.snapshot(d), null, 1));
@@ -817,11 +827,110 @@ export class GmSession extends TableSession {
     this.doInitRoll(this.actor, sheetId);
   }
 
+  // ---------- mapa: tokens, camadas, grid, névoa, régua e ping ----------
+
+  private cellSize() {
+    return this.map.grid.size || 70;
+  }
+
+  addToken(x: number, y: number, o: { name?: string; sheetId?: string; img?: string; cells?: number } = {}) {
+    const sheet = o.sheetId ? this.docs.sheets[o.sheetId] : undefined;
+    const size = (o.cells ?? 1) * this.cellSize();
+    const owner = sheet?.perm.owner;
+    const perm: Perm = owner
+      ? { view: 'all', move: 'owner', edit: 'owner', owner }
+      : { view: 'all', move: 'gm', edit: 'gm' };
+    let pos = { x: x - size / 2, y: y - size / 2 };
+    if (this.map.grid.enabled && this.map.grid.snap) pos = snapToGrid(pos.x, pos.y, size, size, this.map.grid);
+    return this.addItem({
+      type: 'token', ...pos, w: size, h: size, perm,
+      name: o.name ?? sheet?.name ?? 'Token', sheetId: sheet?.id, img: o.img, conditions: [],
+    });
+  }
+
+  async setTokenImage(id: string, file: Blob) {
+    const item = this.items.get(id);
+    if (!item) return;
+    try {
+      const img = await processImage(file);
+      await this.images.save(img);
+      item.img = img.hash;
+      this.bump();
+      this.broadcastItem(item);
+      this.saveBoard();
+    } catch (e) {
+      this.toast(`Não consegui usar a imagem: ${(e as Error).message}`, 'error');
+    }
+  }
+
+  /** Mudanças do mestre em qualquer campo do item (camada, trava, ficha ligada...). */
+  updateItem(id: string, patch: Partial<BoardItem>) {
+    const item = this.items.get(id);
+    if (!item) return;
+    Object.assign(item, patch);
+    for (const k of Object.keys(patch) as (keyof BoardItem)[]) if (patch[k] === undefined) delete item[k];
+    this.bump();
+    this.broadcastItem(item);
+    this.saveBoard();
+  }
+
+  setLayer(id: string, layer: Layer) {
+    this.updateItem(id, { layer, z: this.maxZ() + 1 });
+  }
+
+  private broadcastMap() {
+    this.broadcast({ k: 'map', map: $state.snapshot(this.map) });
+    this.saveBoard();
+  }
+
+  setGrid(grid: GridSettings) {
+    this.map.grid = grid;
+    this.bump();
+    this.broadcastMap();
+  }
+
+  setFogEnabled(enabled: boolean) {
+    this.map.fog.enabled = enabled;
+    this.broadcastMap();
+  }
+
+  addFog(shape: FogShape) {
+    const s: FogShape = shape.kind === 'brush' ? { ...shape, pts: simplifyStroke(shape.pts, (shape.r ?? 40) / 3) } : shape;
+    if (s.kind === 'all') {
+      this.map.fog.shapes = [s];
+      this.broadcastMap();
+      return;
+    }
+    this.map.fog.shapes.push(s);
+    this.broadcast({ k: 'fogAdd', shape: s });
+    this.saveBoard();
+  }
+
+  sendRuler(pts: number[] | null) {
+    this.broadcast({ k: 'ruler', pid: 'gm', pts });
+  }
+
+  private ping2(pid: string, x: number, y: number) {
+    this.onPing(pid, x, y);
+    this.broadcast({ k: 'ping', pid, x, y });
+  }
+
+  ping(x: number, y: number) {
+    this.ping2('gm', x, y);
+  }
+
   // ---------- persistência ----------
 
   private saveBoard() {
     this.saver.schedule('quadro', () =>
-      this.store.writeText(PATHS.board, JSON.stringify({ version: 1, items: [...this.items.values()] }, null, 1)),
+      this.store.writeText(
+        PATHS.board,
+        JSON.stringify(
+          { version: 1, items: [...this.items.values()], map: { ...$state.snapshot(this.map), fog: { ...this.map.fog, shapes: compactFog($state.snapshot(this.map.fog.shapes)) } } },
+          null,
+          1,
+        ),
+      ),
     );
   }
 

@@ -84,6 +84,7 @@ export class PlayerSession extends TableSession {
         this.muted = !!d.roster[this.myPid]?.muted;
         this.combat = d.combat;
         this.settings = d.settings;
+        this.map = d.map;
         // Os documentos chegam logo depois, um por mensagem.
         this.docs = emptyDocs();
         this.synced = true;
@@ -102,6 +103,18 @@ export class PlayerSession extends TableSession {
         break;
       case 'settings':
         this.settings = d.settings;
+        break;
+      case 'map':
+        this.map = d.map;
+        break;
+      case 'fogAdd':
+        this.map.fog.shapes.push(d.shape);
+        break;
+      case 'ruler':
+        this.onRuler(d.pid, d.pts);
+        break;
+      case 'ping':
+        this.onPing(d.pid, d.x, d.y);
         break;
       case 'item':
         this.items.set(d.item.id, d.item);
@@ -186,6 +199,19 @@ export class PlayerSession extends TableSession {
 
   rollInitiative(sheetId: string) {
     if (this.canSend()) this.intent({ k: 'initRoll', sheetId });
+  }
+
+  private lastRuler = 0;
+  sendRuler(pts: number[] | null) {
+    const now = performance.now();
+    if (pts && now - this.lastRuler < 90) return;
+    this.lastRuler = now;
+    this.intent({ k: 'ruler', pts });
+  }
+
+  ping(x: number, y: number) {
+    this.onPing(this.myPid, x, y);
+    this.intent({ k: 'ping', x, y });
   }
 
   transform(id: string, patch: TransformPatch, final: boolean) {

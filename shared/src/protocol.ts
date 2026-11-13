@@ -6,6 +6,7 @@ import { PLAYER_EDITABLE_FIELDS, TRANSFORM_FIELDS } from './board';
 import type { Combat } from './combat';
 import type { AnyDoc, Collection, TableSettings } from './docs';
 import type { FieldValue } from './sheets';
+import type { FogShape, MapSettings } from './map';
 
 export const PROTOCOL_VERSION = 1;
 /** Tamanho máximo de uma mensagem WebSocket aceita pelo relay. */
@@ -85,13 +86,15 @@ export type PlayerIntent =
   | { k: 'sheetNew'; templateId: string; name: string }
   | { k: 'sheetSet'; id: string; values: Record<string, FieldValue>; name?: string }
   | { k: 'sheetRoll'; id: string; field: string; priv: boolean }
-  | { k: 'initRoll'; sheetId: string };
+  | { k: 'initRoll'; sheetId: string }
+  | { k: 'ruler'; pts: number[] | null }
+  | { k: 'ping'; x: number; y: number };
 
 /** Mestre → jogador (já filtrado pelo que o jogador pode ver). */
 export type GmMessage =
   | {
       k: 'snapshot'; campaign: string; items: BoardItem[]; log: LogEntry[]; roster: Roster; filter: FilterConfig;
-      combat: Combat; settings: TableSettings;
+      combat: Combat; settings: TableSettings; map: MapSettings;
     }
   | { k: 'item'; item: BoardItem }
   | { k: 'remove'; id: string }
@@ -105,7 +108,11 @@ export type GmMessage =
   | { k: 'doc'; col: Collection; doc: AnyDoc }
   | { k: 'docRemove'; col: Collection; id: string }
   | { k: 'combat'; combat: Combat }
-  | { k: 'settings'; settings: TableSettings };
+  | { k: 'settings'; settings: TableSettings }
+  | { k: 'map'; map: MapSettings }
+  | { k: 'fogAdd'; shape: FogShape }
+  | { k: 'ruler'; pid: string; pts: number[] | null }
+  | { k: 'ping'; pid: string; x: number; y: number };
 
 // ---------- Validação (o mestre nunca confia no jogador) ----------
 
@@ -146,7 +153,12 @@ export function parsePlayerIntent(x: unknown): PlayerIntent | null {
       for (const f of PLAYER_EDITABLE_FIELDS) {
         const v = x.patch[f];
         if (v === undefined) continue;
-        if (!isStr(v, f === 'color' ? 20 : MAX_TEXT_FIELD)) return null;
+        if (f === 'conditions') {
+          if (!Array.isArray(v) || v.length > 12 || !v.every((c) => isStr(c, 24))) return null;
+          patch.conditions = v as string[];
+          continue;
+        }
+        if (!isStr(v, f === 'color' ? 20 : f === 'name' ? 40 : MAX_TEXT_FIELD)) return null;
         if (f === 'color' && !/^#[0-9a-f]{6}$/i.test(v)) return null;
         patch[f] = v;
       }
@@ -173,6 +185,13 @@ export function parsePlayerIntent(x: unknown): PlayerIntent | null {
         : null;
     case 'initRoll':
       return isStr(x.sheetId, 64) && ID_RE.test(x.sheetId) ? { k: 'initRoll', sheetId: x.sheetId } : null;
+    case 'ruler':
+      if (x.pts === null) return { k: 'ruler', pts: null };
+      return Array.isArray(x.pts) && x.pts.length >= 4 && x.pts.length <= 40 && x.pts.length % 2 === 0 && x.pts.every(isNum)
+        ? { k: 'ruler', pts: x.pts as number[] }
+        : null;
+    case 'ping':
+      return isNum(x.x) && isNum(x.y) ? { k: 'ping', x: x.x, y: x.y } : null;
   }
   return null;
 }
