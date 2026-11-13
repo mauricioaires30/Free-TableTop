@@ -12,6 +12,9 @@
   import EditDialog from '../components/EditDialog.svelte';
   import PermissionDialog from '../components/PermissionDialog.svelte';
   import InviteBox from '../components/InviteBox.svelte';
+  import SheetsPanel from '../components/SheetsPanel.svelte';
+  import SheetWindow from '../components/SheetWindow.svelte';
+  import TemplateEditor from '../components/TemplateEditor.svelte';
 
   let { session, gm = null, onLeave }: { session: TableSession; gm?: GmSession | null; onLeave?: () => void } = $props();
 
@@ -19,7 +22,16 @@
   if (import.meta.env.DEV) (window as unknown as { __ftt: unknown }).__ftt = session;
 
   let renderer = $state<BoardRenderer | null>(null);
-  let tab = $state<'chat' | 'players' | 'settings'>('chat');
+  type Tab = 'chat' | 'sheets' | 'players' | 'settings';
+  let tab = $state<Tab>('chat');
+  let showTemplates = $state(false);
+  let permSheet = $state<string | null>(null);
+  /** Ordem de empilhamento das janelas de ficha (a última fica na frente). */
+  let sheetOrder = $state<string[]>([]);
+  const windowZ = (id: string) => 20 + Math.max(0, sheetOrder.indexOf(id));
+  function focusSheet(id: string) {
+    sheetOrder = [...sheetOrder.filter((x) => x !== id), id];
+  }
   let sidebarOpen = $state(typeof window === 'undefined' || window.innerWidth > 760);
   let menu = $state<{ x: number; y: number; items: MenuItem[] } | null>(null);
   let editing = $state<BoardItem | null>(null);
@@ -184,13 +196,16 @@
     {#if sidebarOpen}
       <aside class="side">
         <nav class="tabs">
-          <button class:on={tab === 'chat'} onclick={() => (tab = 'chat')}>Chat & dados</button>
+          <button class:on={tab === 'chat'} onclick={() => (tab = 'chat')}>Chat</button>
+          <button class:on={tab === 'sheets'} onclick={() => (tab = 'sheets')}>Fichas</button>
           <button class:on={tab === 'players'} onclick={() => (tab = 'players')}>Jogadores ({onlineCount})</button>
           {#if gm}<button class:on={tab === 'settings'} onclick={() => (tab = 'settings')}>Mesa</button>{/if}
         </nav>
         <div class="tab-body">
           {#if tab === 'chat'}
             <ChatPanel {session} />
+          {:else if tab === 'sheets'}
+            <SheetsPanel {session} {gm} onTemplates={() => (showTemplates = true)} onPerm={(id) => (permSheet = id)} />
           {:else if tab === 'players'}
             <PlayersPanel {session} {gm} />
           {:else if gm}
@@ -210,7 +225,33 @@
     <EditDialog {session} item={editing} onClose={() => (editing = null)} />
   {/if}
   {#if permItem && gm}
-    <PermissionDialog {gm} item={permItem} onClose={() => (permItem = null)} />
+    {@const it = permItem}
+    <PermissionDialog {gm} perm={it.perm} onSave={(p) => gm.setPerm(it.id, p)} onClose={() => (permItem = null)} />
+  {/if}
+  {#each session.openSheets as id, i (id)}
+    <SheetWindow
+      {session}
+      {id}
+      index={i}
+      z={windowZ(id)}
+      onFocus={() => focusSheet(id)}
+      onPerm={gm ? (sid) => (permSheet = sid) : undefined}
+    />
+  {/each}
+  {#if showTemplates && gm}
+    <TemplateEditor {gm} onClose={() => (showTemplates = false)} />
+  {/if}
+  {#if permSheet && gm && gm.docs.sheets[permSheet]}
+    {@const sid = permSheet}
+    <PermissionDialog
+      {gm}
+      title="Permissões da ficha"
+      perm={gm.docs.sheets[sid].perm}
+      keys={['view', 'edit']}
+      hints={{ view: 'Quem não pode ver não recebe nada desta ficha.', edit: 'Mudar valores, nome e rolar iniciativa pela ficha.' }}
+      onSave={(p) => gm.setDocPerm('sheets', sid, p)}
+      onClose={() => (permSheet = null)}
+    />
   {/if}
   {#if showInvite && gm}
     <div class="scrim" role="presentation" onclick={(e) => e.target === e.currentTarget && (showInvite = false)}>

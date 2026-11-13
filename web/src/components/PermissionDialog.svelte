@@ -1,8 +1,27 @@
 <script lang="ts">
-  import { colorFor, type BoardItem, type Perm, type Who } from '@ftt/shared';
+  import { colorFor, type Perm, type Who } from '@ftt/shared';
   import type { GmSession } from '../lib/session/gm.svelte';
 
-  let { gm, item, onClose }: { gm: GmSession; item: BoardItem; onClose: () => void } = $props();
+  type Key = 'view' | 'move' | 'edit';
+
+  let {
+    gm,
+    perm: initial,
+    title = 'Permissões',
+    keys = ['view', 'move', 'edit'],
+    hints = {},
+    onSave,
+    onClose,
+  }: {
+    gm: GmSession;
+    perm: Perm;
+    title?: string;
+    /** Quais linhas mostrar (fichas não têm "mover"). */
+    keys?: Key[];
+    hints?: Partial<Record<Key, string>>;
+    onSave: (perm: Perm) => void;
+    onClose: () => void;
+  } = $props();
 
   type Mode = 'all' | 'gm' | 'owner' | 'list';
   type Row = { mode: Mode; list: string[] };
@@ -12,11 +31,11 @@
   const fromRow = (r: Row): Who => (r.mode === 'list' ? (r.list.length ? [...r.list] : 'gm') : r.mode);
 
   let rows = $state<Record<'view' | 'move' | 'edit', Row>>({
-    view: toRow(item.perm.view),
-    move: toRow(item.perm.move),
-    edit: toRow(item.perm.edit),
+    view: toRow(initial.view),
+    move: toRow(initial.move),
+    edit: toRow(initial.edit),
   });
-  let owner = $state(item.perm.owner ?? '');
+  let owner = $state(initial.owner ?? '');
 
   const players = $derived(
     Object.entries(gm.roster)
@@ -41,19 +60,19 @@
     row.list = row.list.includes(pid) ? row.list.filter((p) => p !== pid) : [...row.list, pid];
   }
 
-  const needsOwner = $derived(Object.values(rows).some((r) => r.mode === 'owner'));
+  const needsOwner = $derived(keys.some((k) => rows[k].mode === 'owner'));
 
   function save() {
     const perm: Perm = { view: fromRow(rows.view), move: fromRow(rows.move), edit: fromRow(rows.edit) };
     if (owner) perm.owner = owner;
-    gm.setPerm(item.id, perm);
+    onSave(perm);
     onClose();
   }
 </script>
 
 <div class="scrim" role="presentation" onclick={(e) => e.target === e.currentTarget && onClose()} onkeydown={(e) => e.key === 'Escape' && onClose()}>
   <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="perm-title">
-    <h2 id="perm-title">Permissões</h2>
+    <h2 id="perm-title">{title}</h2>
     <p class="muted">Você (mestre) sempre pode tudo. Isto vale para os jogadores.</p>
 
     <div class="presets">
@@ -63,7 +82,7 @@
       <button onclick={() => preset('free')}>Livre para todos</button>
     </div>
 
-    {#each ['view', 'move', 'edit'] as const as key (key)}
+    {#each keys as key (key)}
       {@const row = rows[key]}
       <fieldset>
         <legend>{LABELS[key].title}</legend>
@@ -87,7 +106,7 @@
             {/each}
           </div>
         {/if}
-        <p class="muted small">{LABELS[key].hint}</p>
+        <p class="muted small">{hints[key] ?? LABELS[key].hint}</p>
       </fieldset>
     {/each}
 

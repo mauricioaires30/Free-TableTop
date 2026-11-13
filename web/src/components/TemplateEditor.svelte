@@ -1,0 +1,318 @@
+<script lang="ts">
+  import {
+    FIELD_TYPE_LABELS, fieldIdFromLabel, TEMPLATE_PRESETS,
+    type FieldType, type SheetTemplate, type TemplateField,
+  } from '@ftt/shared';
+  import type { GmSession } from '../lib/session/gm.svelte';
+
+  let { gm, onClose }: { gm: GmSession; onClose: () => void } = $props();
+
+  const templates = $derived(Object.values(gm.docs.templates).sort((a, b) => a.name.localeCompare(b.name)));
+  let selected = $state<string | null>(null);
+  let draft = $state<SheetTemplate | null>(null);
+  let dirty = $state(false);
+  let presetIdx = $state(0);
+  /** Campos criados agora: o código acompanha o rótulo até salvar. */
+  let fresh = new Set<number>();
+
+  const usage = $derived(
+    Object.values(gm.docs.sheets).reduce<Record<string, number>>((acc, s) => ((acc[s.templateId] = (acc[s.templateId] ?? 0) + 1), acc), {}),
+  );
+
+  function pick(id: string) {
+    if (dirty && !confirm('Descartar as mudanças não salvas?')) return;
+    selected = id;
+    draft = structuredClone($state.snapshot(gm.docs.templates[id]));
+    dirty = false;
+    fresh = new Set();
+  }
+
+  $effect(() => {
+    if (!selected && templates.length) pick(templates[0].id);
+  });
+
+  function createFromPreset() {
+    const t = gm.createTemplate({ ...TEMPLATE_PRESETS[presetIdx], name: `${TEMPLATE_PRESETS[presetIdx].name} (novo)` });
+    dirty = false;
+    pick(t.id);
+  }
+
+  function change() {
+    dirty = true;
+  }
+
+  function addField() {
+    if (!draft) return;
+    const taken = new Set(draft.fields.map((f) => f.id));
+    draft.fields.push({ id: fieldIdFromLabel('Novo campo', taken), label: 'Novo campo', type: 'text' });
+    fresh.add(draft.fields.length - 1);
+    change();
+  }
+
+  function relabel(i: number) {
+    change();
+    if (!draft || !fresh.has(i)) return;
+    const taken = new Set(draft.fields.filter((_, j) => j !== i).map((f) => f.id));
+    draft.fields[i].id = fieldIdFromLabel(draft.fields[i].label, taken);
+  }
+
+  function moveField(i: number, d: -1 | 1) {
+    if (!draft) return;
+    const j = i + d;
+    if (j < 0 || j >= draft.fields.length) return;
+    [draft.fields[i], draft.fields[j]] = [draft.fields[j], draft.fields[i]];
+    const fi = fresh.has(i);
+    const fj = fresh.has(j);
+    fresh.delete(i);
+    fresh.delete(j);
+    if (fi) fresh.add(j);
+    if (fj) fresh.add(i);
+    change();
+  }
+
+  function removeField(i: number) {
+    if (!draft) return;
+    const f = draft.fields[i];
+    if (!confirm(`Remover o campo "${f.label}"? Os valores dele somem das fichas que usam este modelo.`)) return;
+    draft.fields.splice(i, 1);
+    fresh = new Set([...fresh].filter((x) => x !== i).map((x) => (x > i ? x - 1 : x)));
+    if (draft.hpField === f.id) draft.hpField = undefined;
+    change();
+  }
+
+  function setType(f: TemplateField, t: FieldType) {
+    f.type = t;
+    if (t === 'resource' && !f.max) f.max = 10;
+    change();
+  }
+
+  function save() {
+    if (!draft) return;
+    draft.name = draft.name.trim() || 'Modelo';
+    if (draft.initiative !== undefined && !draft.initiative.trim()) draft.initiative = undefined;
+    for (const f of draft.fields) {
+      if (f.roll !== undefined && !f.roll.trim()) delete f.roll;
+    }
+    gm.saveTemplate(draft);
+    dirty = false;
+    fresh = new Set();
+    gm.toast('Modelo salvo.');
+  }
+
+  function remove() {
+    if (!draft) return;
+    if (!confirm(`Apagar o modelo "${draft.name}"?`)) return;
+    if (gm.deleteTemplate(draft.id)) {
+      selected = null;
+      draft = null;
+      dirty = false;
+    }
+  }
+
+  function close() {
+    if (dirty && !confirm('Fechar sem salvar as mudanças?')) return;
+    onClose();
+  }
+</script>
+
+<div class="scrim" role="presentation" onclick={(e) => e.target === e.currentTarget && close()} onkeydown={(e) => e.key === 'Escape' && close()}>
+  <div class="dialog wide" role="dialog" aria-modal="true" aria-labelledby="tpl-title">
+    <div class="head">
+      <h2 id="tpl-title">Modelos de ficha</h2>
+      <button class="ghost" onclick={close} aria-label="Fechar">✕</button>
+    </div>
+    <p class="muted">O modelo define o sistema da sua mesa: quais campos a ficha tem e o que cada um rola.</p>
+
+    <div class="cols">
+      <aside>
+        <ul>
+          {#each templates as t (t.id)}
+            <li><button class:on={t.id === selected} onclick={() => pick(t.id)}>{t.name}<span class="muted"> · {usage[t.id] ?? 0}</span></button></li>
+          {/each}
+        </ul>
+        <label for="pp">Novo a partir de</label>
+        <select id="pp" bind:value={presetIdx}>
+          {#each TEMPLATE_PRESETS as p, i (p.name)}<option value={i}>{p.name}</option>{/each}
+        </select>
+        <button class="wide-btn" onclick={createFromPreset}>+ Criar modelo</button>
+      </aside>
+
+      {#if draft}
+        <div class="edit">
+          <div class="grid2">
+            <div>
+              <label for="tn">Nome do modelo</label>
+              <input id="tn" bind:value={draft.name} oninput={change} maxlength="60" />
+            </div>
+            <div>
+              <label for="tm">Modificador de atributo</label>
+              <select id="tm" bind:value={draft.attrMod} onchange={change}>
+                <option value="none">Nenhum (usa o valor)</option>
+                <option value="d20">Estilo d20: (valor − 10) ÷ 2</option>
+              </select>
+            </div>
+            <div>
+              <label for="ti">Fórmula de iniciativa</label>
+              <input id="ti" value={draft.initiative ?? ''} oninput={(e) => ((draft!.initiative = e.currentTarget.value), change())} placeholder="1d20+&#123;des.mod&#125;" />
+            </div>
+            <div>
+              <label for="th">Barra de vida (combate e tokens)</label>
+              <select id="th" value={draft.hpField ?? ''} onchange={(e) => ((draft!.hpField = e.currentTarget.value || undefined), change())}>
+                <option value="">Nenhuma</option>
+                {#each draft.fields.filter((f) => f.type === 'resource') as f (f.id)}<option value={f.id}>{f.label}</option>{/each}
+              </select>
+            </div>
+          </div>
+
+          <h3>Campos</h3>
+          <div class="fields">
+            {#each draft.fields as f, i (i)}
+              <div class="frow">
+                <div class="order">
+                  <button class="ghost tiny" onclick={() => moveField(i, -1)} disabled={i === 0} aria-label="Subir">▲</button>
+                  <button class="ghost tiny" onclick={() => moveField(i, 1)} disabled={i === draft.fields.length - 1} aria-label="Descer">▼</button>
+                </div>
+                <input class="flabel" bind:value={f.label} oninput={() => relabel(i)} aria-label="Rótulo" maxlength="40" />
+                <select value={f.type} onchange={(e) => setType(f, e.currentTarget.value as FieldType)} aria-label="Tipo">
+                  {#each Object.entries(FIELD_TYPE_LABELS) as [k, v] (k)}<option value={k}>{v}</option>{/each}
+                </select>
+                {#if f.type !== 'section' && f.type !== 'check'}
+                  <input class="froll" value={f.roll ?? ''} oninput={(e) => ((f.roll = e.currentTarget.value), change())} placeholder="rolagem (opcional)" aria-label="Fórmula de rolagem" />
+                {:else}
+                  <span class="froll"></span>
+                {/if}
+                {#if f.type === 'resource'}
+                  <input class="fmax" type="number" value={f.max ?? 10} oninput={(e) => ((f.max = Number(e.currentTarget.value) || 0), change())} aria-label="Máximo inicial" title="Máximo inicial" />
+                {:else}
+                  <label class="fwide" title="Ocupar a linha inteira"><input type="checkbox" bind:checked={f.wide} onchange={change} />larga</label>
+                {/if}
+                <code title="Use nas fórmulas">&#123;{f.id}&#125;</code>
+                <button class="ghost tiny danger" onclick={() => removeField(i)} aria-label="Remover campo">✕</button>
+              </div>
+            {/each}
+          </div>
+          <button onclick={addField}>+ Adicionar campo</button>
+
+          <details class="help">
+            <summary>Como escrever fórmulas</summary>
+            <ul class="muted">
+              <li><code>&#123;v&#125;</code> valor do campo clicado · <code>&#123;mod&#125;</code> modificador dele</li>
+              <li><code>&#123;for&#125;</code>, <code>&#123;for.mod&#125;</code>, <code>&#123;pv.max&#125;</code> qualquer campo pelo código</li>
+              <li>Exemplos: <code>1d20+&#123;mod&#125;</code> · <code>&#123;v&#125;d20kh1</code> (rola tantos d20 quanto o atributo e fica com o maior) · <code>2d6+&#123;for.mod&#125;</code></li>
+            </ul>
+          </details>
+
+          <div class="actions">
+            <button class="ghost danger" onclick={remove}>Apagar modelo</button>
+            <span class="spacer"></span>
+            <button class="primary" onclick={save} disabled={!dirty}>{dirty ? 'Salvar modelo' : 'Salvo'}</button>
+          </div>
+        </div>
+      {/if}
+    </div>
+  </div>
+</div>
+
+<style>
+  .wide {
+    width: min(980px, 100%);
+  }
+  .head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .cols {
+    display: grid;
+    grid-template-columns: 210px 1fr;
+    gap: 18px;
+  }
+  aside ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  aside li button {
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border-color: transparent;
+    margin-bottom: 2px;
+  }
+  aside li button.on {
+    background: var(--panel-2);
+    border-color: var(--accent);
+  }
+  .wide-btn {
+    width: 100%;
+    margin-top: 8px;
+  }
+  .grid2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 12px;
+  }
+  h3 {
+    font-size: 15px;
+    margin: 16px 0 8px;
+    color: var(--muted);
+  }
+  .fields {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .frow {
+    display: grid;
+    grid-template-columns: 26px 1.3fr 1fr 1.2fr 70px auto 28px;
+    gap: 6px;
+    align-items: center;
+  }
+  .frow input,
+  .frow select {
+    padding: 6px 8px;
+  }
+  .order {
+    display: flex;
+    flex-direction: column;
+  }
+  .tiny {
+    padding: 0 5px;
+    font-size: 10px;
+    line-height: 1.4;
+  }
+  .fwide {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin: 0;
+    font-size: 12px;
+  }
+  code {
+    font-size: 11px;
+    color: var(--accent-2);
+    white-space: nowrap;
+  }
+  .help {
+    margin-top: 14px;
+    font-size: 13px;
+  }
+  .help ul {
+    padding-left: 18px;
+  }
+  .spacer {
+    flex: 1;
+  }
+  @media (max-width: 760px) {
+    .cols {
+      grid-template-columns: 1fr;
+    }
+    .frow {
+      grid-template-columns: 26px 1fr 1fr;
+    }
+    .grid2 {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

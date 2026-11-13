@@ -1,20 +1,29 @@
 // Sessão do mestre: é a autoridade da mesa. Valida tudo o que os jogadores pedem,
 // rola os dados, salva na pasta e envia a cada jogador só o que ele pode ver.
 import {
-  applyFilter, can, DEFAULT_ITEM_PERM, DiceError, itemForPlayer, logVisibleTo, newInvite, newItemId,
-  parsePlayerIntent, PROTOCOL_VERSION, rollDice, TRANSFORM_FIELDS, WordFilter,
-  type Actor, type BoardItem, type EditPatch, type FilterConfig, type GmMessage, type LogEntry,
-  type Peer, type Perm, type PlayerIntent, type RelayToClient, type Roster, type TransformPatch,
+  applyFilter, can, COLLECTIONS, combatForPlayer, defaultValues, DEFAULT_ITEM_PERM, DiceError, docForPlayer,
+  FormulaError, itemForPlayer, logVisibleTo, newInvite, newItemId, parsePlayerIntent, PROTOCOL_VERSION,
+  resolveFormula, rollDice, sanitizeValues, SHEET_PERM, sortEntries, stepTurn, TEMPLATE_PERM, TEMPLATE_PRESETS,
+  TRANSFORM_FIELDS, WordFilter,
+  type Actor, type AnyDoc, type BoardItem, type Collection, type Combat, type CombatEntry, type DocMap,
+  type EditPatch, type FieldValue, type FilterConfig, type GmMessage, type LogEntry, type Peer, type Perm,
+  type PlayerIntent, type RelayToClient, type Roster, type Sheet, type SheetTemplate, type TableSettings,
+  type TransformPatch,
 } from '@ftt/shared';
 import { RelayClient } from '../net/client';
 import { GmImages, processImage } from '../images/images';
 import { inviteUrl, roomSocketUrl } from '../config';
-import { PATHS, readBoard, readCampaign, readRecentLog, Saver, todayKey, type CampaignFile } from '../storage/campaign';
+import {
+  docPath, PATHS, readBoard, readCampaign, readCombat, readDocs, readRecentLog, Saver, todayKey, type CampaignFile,
+} from '../storage/campaign';
 import type { CampaignStore } from '../storage/store';
-import { TableSession } from './table.svelte';
+import { emptyDocs, TableSession, type Docs } from './table.svelte';
 
 /** Campos que só o mestre muda (além dos que o jogador pode editar). */
 export type GmPatch = EditPatch & Partial<Pick<BoardItem, 'back' | 'revealed' | 'text' | 'title' | 'front' | 'color'>>;
+
+/** Máximo de fichas que um jogador pode criar sozinho. */
+const MAX_PLAYER_SHEETS = 10;
 
 const NOTE_COLORS = ['#f5e6a8', '#f7c6c7', '#c9e4c5', '#c6dbf0', '#e2d1f0'];
 
@@ -38,7 +47,14 @@ export class GmSession extends TableSession {
     if (!campaign) return null;
     const items = await readBoard(store);
     const { recent, today } = await readRecentLog(store);
-    return new GmSession(store, campaign, items, recent, today);
+    const docs = emptyDocs();
+    for (const col of COLLECTIONS) {
+      for (const d of await readDocs(store, col)) (docs[col] as Record<string, AnyDoc>)[d.id] = d;
+    }
+    const combat = await readCombat(store);
+    const s = new GmSession(store, campaign, items, recent, today, docs, combat);
+    if (!campaign.seeded) s.seedTemplates();
+    return s;
   }
 
   private constructor(
@@ -47,8 +63,13 @@ export class GmSession extends TableSession {
     items: BoardItem[],
     recentLog: LogEntry[],
     todayLog: LogEntry[],
+    docs: Docs,
+    combat: Combat,
   ) {
     super();
+    this.docs = docs;
+    this.combat = combat;
+    this.settings = campaign.settings!;
     this.roomId = campaign.roomId;
     this.campaignName = campaign.name;
     this.invite = campaign.invite;
@@ -161,7 +182,7 @@ export class GmSession extends TableSession {
         return void this.processChat(actor, d.text);
       case 'roll':
         if (r?.muted) return this.notify(actor, 'O mestre silenciou você.');
-        return this.doRoll(actor, d.expr, d.priv);
+        return void this.doRoll(actor, d.expr, d.priv, d.label);
       case 'transform':
         return this.applyTransform(actor, d.id, d.patch, d.final);
       case 'edit':
@@ -170,6 +191,15 @@ export class GmSession extends TableSession {
         return this.applyZ(actor, d.id, d.dir);
       case 'img':
         return void this.sendImage(actor, d.hash);
+      case 'sheetNew':
+        return this.playerNewSheet(actor, d.templateId, d.name);
+      case 'sheetSet':
+        return this.applySheetSet(actor, d.id, d.values, d.name);
+      case 'sheetRoll':
+        if (r?.muted) return this.notify(actor, 'O mestre silenciou você.');
+        return this.doSheetRoll(actor, d.id, d.field, d.priv);
+      case 'initRoll':
+        return this.doInitRoll(actor, d.sheetId);
     }
   }
 
@@ -179,10 +209,27 @@ export class GmSession extends TableSession {
     let log = $state.snapshot(this.log).filter((e) => logVisibleTo(e, pid)).slice(-150);
     const msg = (): GmMessage => ({
       k: 'snapshot', campaign: this.campaignName, items, log, roster: this.publicRoster(), filter: $state.snapshot(this.filter),
+      combat: this.combatFor(pid), settings: $state.snapshot(this.settings),
     });
     // Garante que o snapshot cabe numa mensagem do relay.
     while (log.length > 10 && JSON.stringify(msg()).length > 500_000) log = log.slice(Math.floor(log.length / 2));
     this.sendTo(pid, msg());
+    // Documentos vão um por mensagem (podem ser grandes).
+    for (const col of COLLECTIONS) {
+      for (const d of Object.values(this.docs[col])) {
+        const v = docForPlayer(d, actor);
+        if (v) this.sendTo(pid, { k: 'doc', col, doc: $state.snapshot(v) as AnyDoc });
+      }
+    }
+  }
+
+  private combatFor(pid: string): Combat {
+    return combatForPlayer($state.snapshot(this.combat), { role: 'player', pid }, $state.snapshot(this.docs.sheets));
+  }
+
+  private broadcastCombat() {
+    for (const p of this.peers) this.sendTo(p.pid, { k: 'combat', combat: this.combatFor(p.pid) });
+    this.saver.schedule('combate', () => this.store.writeText(PATHS.combat, JSON.stringify($state.snapshot(this.combat), null, 1)));
   }
 
   /** Envia o item a cada jogador conectado, já filtrado (ou manda remover, se ele não pode mais ver). */
@@ -210,8 +257,8 @@ export class GmSession extends TableSession {
     if (cmd) {
       const c = cmd[1].toLowerCase();
       const rest = cmd[2].trim();
-      if (['r', 'roll', 'rolar'].includes(c)) return this.doRoll(actor, rest, false), true;
-      if (['gr', 'pr', 'rp', 'privado'].includes(c)) return this.doRoll(actor, rest, true), true;
+      if (['r', 'roll', 'rolar'].includes(c)) return !!this.doRoll(actor, rest, false);
+      if (['gr', 'pr', 'rp', 'privado'].includes(c)) return !!this.doRoll(actor, rest, true);
       if (['w', 'sussurro', 'whisper', 'cochichar'].includes(c)) return this.whisper(actor, rest);
       this.notify(actor, 'Comando desconhecido. Use /r 1d20, /gr 1d20 (privado) ou /w nome mensagem.');
       return false;
@@ -254,12 +301,14 @@ export class GmSession extends TableSession {
     return true;
   }
 
-  private doRoll(actor: Actor, expr: string, priv: boolean) {
+  private doRoll(actor: Actor, expr: string, priv: boolean, label?: string) {
     try {
       const roll = rollDice(expr || '1d20');
-      this.addLog({ from: actor.pid, kind: 'roll', roll, to: priv ? [] : undefined });
+      this.addLog({ from: actor.pid, kind: 'roll', roll, label, to: priv ? [] : undefined });
+      return roll;
     } catch (e) {
       this.notify(actor, e instanceof DiceError ? `Rolagem inválida: ${e.message}` : 'Rolagem inválida');
+      return null;
     }
   }
 
@@ -340,8 +389,8 @@ export class GmSession extends TableSession {
     return this.processChat(this.actor, text);
   }
 
-  roll(expr: string, priv: boolean) {
-    this.doRoll(this.actor, expr, priv);
+  roll(expr: string, priv: boolean, label?: string) {
+    this.doRoll(this.actor, expr, priv, label);
   }
 
   transform(id: string, patch: TransformPatch, final: boolean) {
@@ -470,6 +519,304 @@ export class GmSession extends TableSession {
     this.saveCampaign();
   }
 
+  // ---------- documentos: modelos e fichas ----------
+
+  private saveDoc(col: Collection, id: string) {
+    this.saver.schedule(`${col}/${id}`, async () => {
+      const d = this.docs[col][id];
+      if (d) await this.store.writeText(docPath(col, id), JSON.stringify($state.snapshot(d), null, 1));
+    });
+  }
+
+  private broadcastDoc(col: Collection, id: string) {
+    const d = this.docs[col][id];
+    if (!d) return;
+    const snap = $state.snapshot(d) as AnyDoc;
+    for (const p of this.peers) {
+      const v = docForPlayer(snap, { role: 'player', pid: p.pid });
+      this.sendTo(p.pid, v ? { k: 'doc', col, doc: v } : { k: 'docRemove', col, id });
+    }
+  }
+
+  putDoc<C extends Collection>(col: C, doc: DocMap[C]) {
+    doc.updatedAt = Date.now();
+    (this.docs[col] as Record<string, DocMap[C]>)[doc.id] = doc;
+    this.saveDoc(col, doc.id);
+    this.broadcastDoc(col, doc.id);
+  }
+
+  removeDoc(col: Collection, id: string) {
+    if (!this.docs[col][id]) return;
+    delete this.docs[col][id];
+    // Substitui qualquer gravação pendente deste documento pela remoção do arquivo.
+    this.saver.schedule(`${col}/${id}`, () => this.store.remove(docPath(col, id)));
+    this.broadcast({ k: 'docRemove', col, id });
+  }
+
+  setDocPerm(col: Collection, id: string, perm: Perm) {
+    const d = this.docs[col][id];
+    if (!d) return;
+    d.perm = perm;
+    d.updatedAt = Date.now();
+    this.saveDoc(col, id);
+    this.broadcastDoc(col, id);
+    if (col === 'sheets') this.broadcastCombat();
+  }
+
+  private canEditDoc(actor: Actor, doc: { perm: Perm }) {
+    if (actor.role === 'gm') return true;
+    const r = this.roster[actor.pid];
+    return !!r && !r.banned && can(actor, 'edit', doc);
+  }
+
+  seedTemplates() {
+    for (const p of TEMPLATE_PRESETS) this.createTemplate(p);
+    this.campaign.seeded = true;
+    this.saveCampaign();
+  }
+
+  createTemplate(base: Omit<SheetTemplate, 'id' | 'perm' | 'updatedAt'> = TEMPLATE_PRESETS[0]): SheetTemplate {
+    const plain = structuredClone($state.snapshot(base)) as Omit<SheetTemplate, 'id' | 'perm' | 'updatedAt'>;
+    const t: SheetTemplate = { ...plain, id: newItemId(), perm: structuredClone(TEMPLATE_PERM), updatedAt: Date.now() };
+    this.putDoc('templates', t);
+    return t;
+  }
+
+  saveTemplate(t: SheetTemplate) {
+    this.putDoc('templates', structuredClone($state.snapshot(t)) as SheetTemplate);
+  }
+
+  deleteTemplate(id: string): boolean {
+    const used = Object.values(this.docs.sheets).filter((s) => s.templateId === id).length;
+    if (used) {
+      this.toast(`Este modelo é usado por ${used} ficha(s). Apague ou troque essas fichas antes.`, 'error');
+      return false;
+    }
+    this.removeDoc('templates', id);
+    return true;
+  }
+
+  createSheet(o: { templateId: string; name: string; kind: Sheet['kind']; owner?: string }): Sheet | null {
+    const t = this.docs.templates[o.templateId];
+    if (!t) return null;
+    const sheet: Sheet = {
+      id: newItemId(),
+      perm: SHEET_PERM(o.kind === 'pc' ? o.owner : undefined),
+      updatedAt: Date.now(),
+      templateId: t.id,
+      name: o.name.trim() || 'Sem nome',
+      kind: o.kind,
+      values: defaultValues($state.snapshot(t) as SheetTemplate),
+    };
+    this.putDoc('sheets', sheet);
+    return sheet;
+  }
+
+  duplicateSheet(id: string) {
+    const src = this.docs.sheets[id];
+    if (!src) return;
+    const copy = structuredClone($state.snapshot(src)) as Sheet;
+    this.putDoc('sheets', { ...copy, id: newItemId(), name: `${copy.name} (cópia)` });
+  }
+
+  deleteSheet(id: string) {
+    this.removeDoc('sheets', id);
+    this.closeSheet(id);
+    if (this.combat.entries.some((e) => e.sheetId === id)) {
+      this.combat.entries = this.combat.entries.map((e) => (e.sheetId === id ? { ...e, sheetId: undefined } : e));
+      this.broadcastCombat();
+    }
+  }
+
+  private playerNewSheet(actor: Actor, templateId: string, name: string) {
+    if (!this.settings.allowPlayerSheets) return this.notify(actor, 'O mestre não permite criar fichas nesta mesa.');
+    const t = this.docs.templates[templateId];
+    if (!t || !can(actor, 'view', t)) return this.notify(actor, 'Modelo de ficha não encontrado.');
+    const owned = Object.values(this.docs.sheets).filter((s) => s.perm.owner === actor.pid).length;
+    if (owned >= MAX_PLAYER_SHEETS) return this.notify(actor, `Limite de ${MAX_PLAYER_SHEETS} fichas por jogador.`);
+    const f = applyFilter(this.filter, name, this.wf);
+    if (!f.ok) return this.notify(actor, f.reason);
+    const s = this.createSheet({ templateId, name: f.text, kind: 'pc', owner: actor.pid });
+    if (s) this.toast(`${this.nameOf(actor.pid)} criou a ficha "${s.name}".`);
+  }
+
+  private applySheetSet(actor: Actor, id: string, values: Record<string, FieldValue>, name?: string) {
+    const sheet = this.docs.sheets[id];
+    if (!sheet) return;
+    if (!this.canEditDoc(actor, sheet)) {
+      this.notify(actor, 'Você não tem permissão para editar esta ficha.');
+      if (actor.role === 'player' && can(actor, 'view', sheet)) {
+        this.sendTo(actor.pid, { k: 'doc', col: 'sheets', doc: $state.snapshot(sheet) as Sheet });
+      }
+      return;
+    }
+    const t = this.templateOf(sheet);
+    if (!t) return;
+    const clean = sanitizeValues($state.snapshot(t) as SheetTemplate, values);
+    if (!clean) return;
+    if (actor.role === 'player') {
+      for (const [k, v] of Object.entries(clean)) {
+        if (typeof v !== 'string' || !v) continue;
+        const f = applyFilter(this.filter, v, this.wf);
+        if (!f.ok) return this.notify(actor, f.reason);
+        clean[k] = f.text;
+      }
+      if (name) {
+        const f = applyFilter(this.filter, name, this.wf);
+        if (!f.ok) return this.notify(actor, f.reason);
+        name = f.text;
+      }
+    }
+    Object.assign(sheet.values, clean);
+    if (name) sheet.name = name.slice(0, 60);
+    sheet.updatedAt = Date.now();
+    this.saveDoc('sheets', id);
+    this.broadcastDoc('sheets', id);
+    if (name && this.combat.entries.some((e) => e.sheetId === id)) {
+      this.combat.entries = this.combat.entries.map((e) => (e.sheetId === id ? { ...e, name: sheet.name } : e));
+      this.broadcastCombat();
+    }
+  }
+
+  private formula(actor: Actor, sheet: Sheet, formula: string, fieldId?: string): string | null {
+    try {
+      const t = $state.snapshot(this.templateOf(sheet)!) as SheetTemplate;
+      return resolveFormula(formula, $state.snapshot(sheet) as Sheet, t, fieldId);
+    } catch (e) {
+      this.notify(actor, e instanceof FormulaError ? `Fórmula inválida: ${e.message}` : 'Fórmula inválida');
+      return null;
+    }
+  }
+
+  private doSheetRoll(actor: Actor, id: string, field: string, priv: boolean) {
+    const sheet = this.docs.sheets[id];
+    if (!sheet || !can(actor, 'view', sheet)) return;
+    const f = this.templateOf(sheet)?.fields.find((x) => x.id === field && x.roll);
+    if (!f) return;
+    const expr = this.formula(actor, sheet, f.roll!, f.id);
+    if (expr) this.doRoll(actor, expr, priv, `${sheet.name}: ${f.label}`);
+  }
+
+  private doInitRoll(actor: Actor, sheetId: string) {
+    const sheet = this.docs.sheets[sheetId];
+    if (!sheet || !this.canEditDoc(actor, sheet)) return this.notify(actor, 'Você só pode rolar iniciativa das suas fichas.');
+    const t = this.templateOf(sheet);
+    if (!t?.initiative) return this.notify(actor, 'O modelo desta ficha não tem fórmula de iniciativa.');
+    const expr = this.formula(actor, sheet, t.initiative);
+    if (!expr) return;
+    const secret = actor.role === 'gm' && sheet.kind === 'npc';
+    const roll = this.doRoll(actor, expr, secret, `${sheet.name}: Iniciativa`);
+    if (roll) this.upsertCombatant(sheet, roll.total);
+  }
+
+  private upsertCombatant(sheet: Sheet, init: number) {
+    const entries = $state.snapshot(this.combat.entries) as CombatEntry[];
+    const e = entries.find((x) => x.sheetId === sheet.id);
+    if (e) e.init = init;
+    else entries.push({ id: newItemId(), name: sheet.name, init, sheetId: sheet.id });
+    this.combat.entries = sortEntries(entries);
+    this.broadcastCombat();
+  }
+
+  // ---------- combate (só o mestre) ----------
+
+  private setCombat(c: Combat) {
+    this.combat = c;
+    this.broadcastCombat();
+  }
+
+  private combatCopy(): Combat {
+    return $state.snapshot(this.combat) as Combat;
+  }
+
+  combatStart() {
+    const c = this.combatCopy();
+    this.setCombat({ ...c, active: true, round: 1, current: c.entries[0]?.id });
+  }
+
+  combatEnd() {
+    this.setCombat({ ...this.combatCopy(), active: false, round: 1, current: undefined });
+  }
+
+  combatClear() {
+    this.setCombat({ active: false, round: 1, entries: [] });
+  }
+
+  combatStep(dir: 1 | -1) {
+    this.setCombat(stepTurn(this.combatCopy(), dir));
+  }
+
+  combatAddSheets(ids: string[]) {
+    const c = this.combatCopy();
+    for (const id of ids) {
+      const s = this.docs.sheets[id];
+      if (s && !c.entries.some((e) => e.sheetId === id)) c.entries.push({ id: newItemId(), name: s.name, init: 0, sheetId: id });
+    }
+    this.setCombat({ ...c, entries: sortEntries(c.entries) });
+  }
+
+  combatAddManual(name: string, init: number, hidden: boolean) {
+    const c = this.combatCopy();
+    c.entries.push({ id: newItemId(), name: name.trim() || 'Criatura', init, ...(hidden ? { hidden: true } : {}) });
+    this.setCombat({ ...c, entries: sortEntries(c.entries) });
+  }
+
+  combatUpdate(id: string, patch: Partial<Pick<CombatEntry, 'name' | 'init' | 'hidden'>>) {
+    const c = this.combatCopy();
+    const e = c.entries.find((x) => x.id === id);
+    if (!e) return;
+    Object.assign(e, patch);
+    if (!e.hidden) delete e.hidden;
+    this.setCombat({ ...c, entries: patch.init !== undefined ? sortEntries(c.entries) : c.entries });
+  }
+
+  combatRemove(id: string) {
+    const c = this.combatCopy();
+    const idx = c.entries.findIndex((e) => e.id === id);
+    if (idx < 0) return;
+    let current = c.current;
+    if (current === id) current = c.entries[(idx + 1) % c.entries.length]?.id;
+    c.entries.splice(idx, 1);
+    this.setCombat({ ...c, current: c.entries.length && current !== id ? current : undefined });
+  }
+
+  /** Rola iniciativa (em segredo) para todas as entradas que não são de jogadores. */
+  combatRollNpcs() {
+    for (const e of this.combatCopy().entries) {
+      const s = e.sheetId ? this.docs.sheets[e.sheetId] : undefined;
+      if (s && s.kind === 'pc') continue;
+      if (s?.kind === 'npc' && this.templateOf(s)?.initiative) {
+        this.doInitRoll(this.actor, s.id);
+      } else {
+        const roll = this.doRoll(this.actor, '1d20', true, `${e.name}: Iniciativa`);
+        if (roll) this.combatUpdate(e.id, { init: roll.total });
+      }
+    }
+  }
+
+  setSettings(settings: TableSettings) {
+    this.settings = settings;
+    this.saveCampaign();
+    this.broadcast({ k: 'settings', settings: $state.snapshot(this.settings) });
+  }
+
+  // métodos da interface comum
+  newSheet(templateId: string, name: string) {
+    this.createSheet({ templateId, name, kind: 'npc' });
+  }
+
+  setSheet(id: string, values: Record<string, FieldValue>, name?: string) {
+    this.applySheetSet(this.actor, id, values, name);
+  }
+
+  rollSheet(id: string, field: string, priv: boolean) {
+    this.doSheetRoll(this.actor, id, field, priv);
+  }
+
+  rollInitiative(sheetId: string) {
+    this.doInitRoll(this.actor, sheetId);
+  }
+
   // ---------- persistência ----------
 
   private saveBoard() {
@@ -486,6 +833,7 @@ export class GmSession extends TableSession {
         invite: this.invite,
         filter: $state.snapshot(this.filter),
         roster: $state.snapshot(this.roster),
+        settings: $state.snapshot(this.settings),
       };
       this.campaign = c;
       return this.store.writeText(PATHS.campaign, JSON.stringify(c, null, 2));

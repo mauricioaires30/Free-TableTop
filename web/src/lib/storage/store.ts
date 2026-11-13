@@ -12,6 +12,7 @@ export interface CampaignStore {
   writeBlob(path: string, blob: Blob): Promise<void>;
   /** Nomes de arquivos dentro de uma pasta. */
   list(dir: string): Promise<string[]>;
+  remove(path: string): Promise<void>;
 }
 
 export const hasFolderAccess = (): boolean => typeof window !== 'undefined' && typeof window.showDirectoryPicker === 'function';
@@ -72,6 +73,17 @@ export class FsStore implements CampaignStore {
     await this.writeBlob(path, new Blob([text], { type: 'text/plain' }));
   }
 
+  async remove(path: string) {
+    const parts = path.split('/');
+    const name = parts.pop()!;
+    const d = await this.dir(parts, false);
+    try {
+      await d?.removeEntry(name);
+    } catch {
+      /* já não existe */
+    }
+  }
+
   async list(dir: string) {
     const d = await this.dir(dir.split('/').filter(Boolean), false);
     if (!d) return [];
@@ -117,6 +129,10 @@ export class IdbStore implements CampaignStore {
 
   async writeBlob(path: string, blob: Blob) {
     await set(this.k(path), blob, cdb());
+  }
+
+  async remove(path: string) {
+    await del(this.k(path), cdb());
   }
 
   async list(dir: string) {

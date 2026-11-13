@@ -9,6 +9,7 @@
   let enabled = $state(gm.filter.enabled);
   let mode = $state(gm.filter.mode);
   let words = $state(gm.filter.words.join('\n'));
+  let allowSheets = $state(gm.settings.allowPlayerSheets);
 
   function saveFilter() {
     const list = [...new Set(words.split('\n').map((w) => w.trim()).filter(Boolean))];
@@ -38,6 +39,19 @@
       Salvo em: <strong>{gm.store.kind === 'fs' ? `📁 ${gm.store.label}` : '🌐 este navegador'}</strong>
       {#if gm.store.kind === 'fs'}<br />Não compartilhe o arquivo campanha.json: ele tem a chave de mestre da sala.{/if}
     </p>
+  </section>
+
+  <section>
+    <h3>Fichas</h3>
+    <label class="check">
+      <input
+        type="checkbox"
+        bind:checked={allowSheets}
+        onchange={() => gm.setSettings({ ...$state.snapshot(gm.settings), allowPlayerSheets: allowSheets })}
+      />
+      Jogadores podem criar a própria ficha
+    </label>
+    <p class="muted small">Cada jogador vê e edita só as fichas dele. Você vê todas e pode liberar outras pelo 🔐.</p>
   </section>
 
   <section>

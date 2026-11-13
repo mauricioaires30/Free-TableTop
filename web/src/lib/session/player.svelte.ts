@@ -1,12 +1,13 @@
 // Sessão do jogador: manda intenções ao mestre e mostra o que o mestre envia.
 import {
-  DiceError, parseDice, PROTOCOL_VERSION, WordFilter,
-  type EditPatch, type GmMessage, type PlayerIntent, type RelayToClient, type TransformPatch,
+  can, DiceError, parseDice, PROTOCOL_VERSION, WordFilter,
+  type AnyDoc, type EditPatch, type FieldValue, type GmMessage, type PlayerIntent, type RelayToClient,
+  type TransformPatch,
 } from '@ftt/shared';
 import { RelayClient } from '../net/client';
 import { PlayerImages } from '../images/images';
 import { roomSocketUrl } from '../config';
-import { TableSession } from './table.svelte';
+import { emptyDocs, TableSession } from './table.svelte';
 
 export class PlayerSession extends TableSession {
   readonly role = 'player' as const;
@@ -81,8 +82,26 @@ export class PlayerSession extends TableSession {
         this.filter = d.filter;
         this.wf = null;
         this.muted = !!d.roster[this.myPid]?.muted;
+        this.combat = d.combat;
+        this.settings = d.settings;
+        // Os documentos chegam logo depois, um por mensagem.
+        this.docs = emptyDocs();
         this.synced = true;
         this.bump();
+        break;
+      case 'doc':
+        (this.docs[d.col] as Record<string, AnyDoc>)[d.doc.id] = d.doc;
+        if (d.col === 'sheets') this.bump(); // tokens mostram a vida das fichas
+        break;
+      case 'docRemove':
+        delete this.docs[d.col][d.id];
+        if (d.col === 'sheets') this.closeSheet(d.id);
+        break;
+      case 'combat':
+        this.combat = d.combat;
+        break;
+      case 'settings':
+        this.settings = d.settings;
         break;
       case 'item':
         this.items.set(d.item.id, d.item);
@@ -136,14 +155,37 @@ export class PlayerSession extends TableSession {
     return this.intent({ k: 'chat', text });
   }
 
-  roll(expr: string, priv: boolean) {
+  roll(expr: string, priv: boolean, label?: string) {
     try {
       parseDice(expr);
     } catch (e) {
       return this.toast(e instanceof DiceError ? `Rolagem inválida: ${e.message}` : 'Rolagem inválida', 'error');
     }
     if (this.muted) return this.toast('O mestre silenciou você.', 'error');
-    if (this.canSend()) this.intent({ k: 'roll', expr, priv });
+    if (this.canSend()) this.intent({ k: 'roll', expr, priv, ...(label ? { label } : {}) });
+  }
+
+  newSheet(templateId: string, name: string) {
+    if (this.canSend()) this.intent({ k: 'sheetNew', templateId, name });
+  }
+
+  setSheet(id: string, values: Record<string, FieldValue>, name?: string) {
+    const sheet = this.docs.sheets[id];
+    if (!sheet || !can(this.actor, 'edit', sheet)) return;
+    if (!this.canSend()) return;
+    // Otimista: mostra já; o mestre confirma (ou corrige) em seguida.
+    Object.assign(sheet.values, values);
+    if (name) sheet.name = name;
+    this.intent({ k: 'sheetSet', id, values, ...(name ? { name } : {}) });
+  }
+
+  rollSheet(id: string, field: string, priv: boolean) {
+    if (this.muted) return this.toast('O mestre silenciou você.', 'error');
+    if (this.canSend()) this.intent({ k: 'sheetRoll', id, field, priv });
+  }
+
+  rollInitiative(sheetId: string) {
+    if (this.canSend()) this.intent({ k: 'initRoll', sheetId });
   }
 
   transform(id: string, patch: TransformPatch, final: boolean) {

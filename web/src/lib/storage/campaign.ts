@@ -1,7 +1,8 @@
 // Formato dos arquivos da campanha na pasta do mestre.
 import {
-  DEFAULT_FILTER, newGmKey, newInvite, newRoomId,
-  type BoardItem, type FilterConfig, type LogEntry, type Roster,
+  COLLECTION_DIRS, DEFAULT_FILTER, DEFAULT_SETTINGS, EMPTY_COMBAT, newGmKey, newInvite, newRoomId,
+  type AnyDoc, type BoardItem, type Collection, type Combat, type FilterConfig, type LogEntry, type Roster,
+  type TableSettings,
 } from '@ftt/shared';
 import type { CampaignStore } from './store';
 
@@ -16,6 +17,9 @@ export interface CampaignFile {
   filter: FilterConfig;
   roster: Roster;
   createdAt: number;
+  settings?: TableSettings;
+  /** Já criou os modelos de ficha prontos (não recria se o mestre apagar todos). */
+  seeded?: boolean;
 }
 
 export interface BoardFile {
@@ -26,6 +30,7 @@ export interface BoardFile {
 export const PATHS = {
   campaign: 'campanha.json',
   board: 'quadro.json',
+  combat: 'combate.json',
   logDir: 'log',
   imageDir: 'imagens',
 };
@@ -51,6 +56,7 @@ export async function readCampaign(store: CampaignStore): Promise<CampaignFile |
   if (c.app !== 'free-tabletop' || !c.roomId || !c.gmKey) throw new Error('campanha.json inválido');
   c.filter ??= structuredClone(DEFAULT_FILTER);
   c.roster ??= {};
+  c.settings = { ...DEFAULT_SETTINGS, ...c.settings };
   return c;
 }
 
@@ -135,4 +141,31 @@ export class Saver {
       return this.run(k);
     }));
   }
+}
+
+export const docPath = (col: Collection, id: string) => `${COLLECTION_DIRS[col]}/${id}.json`;
+
+/** Lê todos os documentos de uma coleção (ignora arquivos corrompidos). */
+export async function readDocs<T extends AnyDoc>(store: CampaignStore, col: Collection): Promise<T[]> {
+  const files = (await store.list(COLLECTION_DIRS[col])).filter((f) => f.endsWith('.json'));
+  const out: T[] = [];
+  for (const f of files) {
+    try {
+      const d = JSON.parse((await store.readText(`${COLLECTION_DIRS[col]}/${f}`)) ?? '') as T;
+      if (d && typeof d.id === 'string' && d.perm) out.push(d);
+    } catch {
+      console.warn('Arquivo ignorado:', col, f);
+    }
+  }
+  return out;
+}
+
+export async function readCombat(store: CampaignStore): Promise<Combat> {
+  try {
+    const txt = await store.readText(PATHS.combat);
+    if (txt) return { ...EMPTY_COMBAT, ...(JSON.parse(txt) as Combat) };
+  } catch {
+    /* arquivo inválido: começa vazio */
+  }
+  return structuredClone(EMPTY_COMBAT);
 }

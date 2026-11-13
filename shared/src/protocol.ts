@@ -3,6 +3,9 @@ import type { BoardItem, EditPatch, TransformPatch } from './board';
 import type { RollResult } from './dice';
 import type { FilterConfig } from './filter';
 import { PLAYER_EDITABLE_FIELDS, TRANSFORM_FIELDS } from './board';
+import type { Combat } from './combat';
+import type { AnyDoc, Collection, TableSettings } from './docs';
+import type { FieldValue } from './sheets';
 
 export const PROTOCOL_VERSION = 1;
 /** Tamanho máximo de uma mensagem WebSocket aceita pelo relay. */
@@ -59,6 +62,8 @@ export interface LogEntry {
   kind: 'chat' | 'roll' | 'system';
   text?: string;
   roll?: RollResult;
+  /** O que foi rolado, ex.: "Força" ou "Iniciativa". */
+  label?: string;
   /** undefined = todos veem. Lista = só o mestre, o autor e esses jogadores veem. */
   to?: string[];
   censored?: boolean;
@@ -72,15 +77,22 @@ export function logVisibleTo(entry: LogEntry, pid: string): boolean {
 export type PlayerIntent =
   | { k: 'sync' }
   | { k: 'chat'; text: string }
-  | { k: 'roll'; expr: string; priv: boolean }
+  | { k: 'roll'; expr: string; priv: boolean; label?: string }
   | { k: 'transform'; id: string; patch: TransformPatch; final: boolean }
   | { k: 'edit'; id: string; patch: EditPatch }
   | { k: 'z'; id: string; dir: 'front' | 'back' }
-  | { k: 'img'; hash: string };
+  | { k: 'img'; hash: string }
+  | { k: 'sheetNew'; templateId: string; name: string }
+  | { k: 'sheetSet'; id: string; values: Record<string, FieldValue>; name?: string }
+  | { k: 'sheetRoll'; id: string; field: string; priv: boolean }
+  | { k: 'initRoll'; sheetId: string };
 
 /** Mestre → jogador (já filtrado pelo que o jogador pode ver). */
 export type GmMessage =
-  | { k: 'snapshot'; campaign: string; items: BoardItem[]; log: LogEntry[]; roster: Roster; filter: FilterConfig }
+  | {
+      k: 'snapshot'; campaign: string; items: BoardItem[]; log: LogEntry[]; roster: Roster; filter: FilterConfig;
+      combat: Combat; settings: TableSettings;
+    }
   | { k: 'item'; item: BoardItem }
   | { k: 'remove'; id: string }
   | { k: 'log'; entry: LogEntry }
@@ -89,7 +101,11 @@ export type GmMessage =
   | { k: 'imgChunk'; hash: string; i: number; n: number; mime: string; data: string }
   | { k: 'imgMissing'; hash: string }
   | { k: 'focus'; x: number; y: number; scale: number }
-  | { k: 'notice'; text: string };
+  | { k: 'notice'; text: string }
+  | { k: 'doc'; col: Collection; doc: AnyDoc }
+  | { k: 'docRemove'; col: Collection; id: string }
+  | { k: 'combat'; combat: Combat }
+  | { k: 'settings'; settings: TableSettings };
 
 // ---------- Validação (o mestre nunca confia no jogador) ----------
 
@@ -110,7 +126,8 @@ export function parsePlayerIntent(x: unknown): PlayerIntent | null {
     case 'chat':
       return isStr(x.text, MAX_CHAT_LENGTH) && x.text.trim() ? { k: 'chat', text: x.text } : null;
     case 'roll':
-      return isStr(x.expr, 100) ? { k: 'roll', expr: x.expr, priv: x.priv === true } : null;
+      if (!isStr(x.expr, 100)) return null;
+      return { k: 'roll', expr: x.expr, priv: x.priv === true, ...(isStr(x.label, 80) && x.label ? { label: x.label } : {}) };
     case 'transform': {
       if (!isStr(x.id, 64) || !ID_RE.test(x.id) || !isObj(x.patch)) return null;
       const patch: TransformPatch = {};
@@ -141,6 +158,21 @@ export function parsePlayerIntent(x: unknown): PlayerIntent | null {
         : null;
     case 'img':
       return isStr(x.hash, 64) && HASH_RE.test(x.hash) ? { k: 'img', hash: x.hash } : null;
+    case 'sheetNew':
+      return isStr(x.templateId, 64) && ID_RE.test(x.templateId) && isStr(x.name, 60) && x.name.trim()
+        ? { k: 'sheetNew', templateId: x.templateId, name: x.name.trim() }
+        : null;
+    case 'sheetSet':
+      // Os valores são conferidos com o modelo da ficha pelo mestre (sanitizeValues).
+      if (!isStr(x.id, 64) || !ID_RE.test(x.id) || !isObj(x.values)) return null;
+      if (x.name !== undefined && (!isStr(x.name, 60) || !x.name.trim())) return null;
+      return { k: 'sheetSet', id: x.id, values: x.values as Record<string, FieldValue>, ...(x.name ? { name: x.name.trim() } : {}) };
+    case 'sheetRoll':
+      return isStr(x.id, 64) && ID_RE.test(x.id) && isStr(x.field, 30)
+        ? { k: 'sheetRoll', id: x.id, field: x.field, priv: x.priv === true }
+        : null;
+    case 'initRoll':
+      return isStr(x.sheetId, 64) && ID_RE.test(x.sheetId) ? { k: 'initRoll', sheetId: x.sheetId } : null;
   }
   return null;
 }

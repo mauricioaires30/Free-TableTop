@@ -58,6 +58,7 @@
           <span class="time">{time(e.ts)}</span>
         </div>
         {#if e.kind === 'roll' && e.roll}
+          {#if e.label}<div class="label">{e.label}</div>{/if}
           <RollView roll={e.roll} />
         {:else}
           <div class="text">{e.text}</div>
@@ -135,6 +136,11 @@
     margin-left: auto;
     font-size: 11px;
     color: var(--muted);
+  }
+  .label {
+    font-size: 12px;
+    color: var(--accent-2);
+    margin-top: 2px;
   }
   .text {
     white-space: pre-wrap;

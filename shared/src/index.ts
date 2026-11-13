@@ -4,3 +4,6 @@ export * from './board';
 export * from './dice';
 export * from './filter';
 export * from './protocol';
+export * from './sheets';
+export * from './combat';
+export * from './docs';
