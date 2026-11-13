@@ -771,7 +771,7 @@ export class GmSession extends TableSession {
     const e = entries.find((x) => x.sheetId === sheet.id);
     if (e) e.init = init;
     else entries.push({ id: newItemId(), name: sheet.name, init, sheetId: sheet.id });
-    this.combat.entries = sortEntries(entries);
+    this.combat.entries = sortEntries(entries, this.settings.initiativeOrder);
     this.broadcastCombat();
   }
 
@@ -809,13 +809,13 @@ export class GmSession extends TableSession {
       const s = this.docs.sheets[id];
       if (s && !c.entries.some((e) => e.sheetId === id)) c.entries.push({ id: newItemId(), name: s.name, init: 0, sheetId: id });
     }
-    this.setCombat({ ...c, entries: sortEntries(c.entries) });
+    this.setCombat({ ...c, entries: sortEntries(c.entries, this.settings.initiativeOrder) });
   }
 
   combatAddManual(name: string, init: number, hidden: boolean) {
     const c = this.combatCopy();
     c.entries.push({ id: newItemId(), name: name.trim() || 'Criatura', init, ...(hidden ? { hidden: true } : {}) });
-    this.setCombat({ ...c, entries: sortEntries(c.entries) });
+    this.setCombat({ ...c, entries: sortEntries(c.entries, this.settings.initiativeOrder) });
   }
 
   combatUpdate(id: string, patch: Partial<Pick<CombatEntry, 'name' | 'init' | 'hidden'>>) {
@@ -824,7 +824,7 @@ export class GmSession extends TableSession {
     if (!e) return;
     Object.assign(e, patch);
     if (!e.hidden) delete e.hidden;
-    this.setCombat({ ...c, entries: patch.init !== undefined ? sortEntries(c.entries) : c.entries });
+    this.setCombat({ ...c, entries: patch.init !== undefined ? sortEntries(c.entries, this.settings.initiativeOrder) : c.entries });
   }
 
   combatRemove(id: string) {
@@ -852,9 +852,14 @@ export class GmSession extends TableSession {
   }
 
   setSettings(settings: TableSettings) {
+    const reorder = settings.initiativeOrder !== this.settings.initiativeOrder;
     this.settings = settings;
     this.saveCampaign();
     this.broadcast({ k: 'settings', settings: $state.snapshot(this.settings) });
+    if (reorder) {
+      const c = this.combatCopy();
+      this.setCombat({ ...c, entries: sortEntries(c.entries, settings.initiativeOrder) });
+    }
   }
 
   // métodos da interface comum

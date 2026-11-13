@@ -21,9 +21,10 @@ export interface Combat {
 
 export const EMPTY_COMBAT: Combat = { active: false, round: 1, entries: [] };
 
-/** Maior iniciativa primeiro; empate mantém a ordem de entrada. */
-export function sortEntries(entries: CombatEntry[]): CombatEntry[] {
-  return entries.map((e, i) => ({ e, i })).sort((a, b) => b.e.init - a.e.init || a.i - b.i).map((x) => x.e);
+/** Ordem da iniciativa (desc = maior primeiro, o padrão); empate mantém a ordem de entrada. */
+export function sortEntries(entries: CombatEntry[], order: 'desc' | 'asc' = 'desc'): CombatEntry[] {
+  const dir = order === 'asc' ? -1 : 1;
+  return entries.map((e, i) => ({ e, i })).sort((a, b) => dir * (b.e.init - a.e.init) || a.i - b.i).map((x) => x.e);
 }
 
 /** Avança (ou volta) o turno, contando rodadas. */

@@ -14,6 +14,8 @@
   let color = $state(item.color ?? '');
 
   const sheets = $derived(Object.values(session.docs.sheets).sort((a, b) => a.name.localeCompare(b.name)));
+  /** Condições definidas pelo mestre na aba Mesa. */
+  const campaignConditions = $derived(session.settings.conditions ?? CONDITIONS);
   const RINGS = ['', '#c0392b', '#d9a75b', '#4caf7a', '#2e86de', '#8e44ad', '#ebe5d8'];
 
   function toggle(c: string) {
@@ -50,7 +52,7 @@
 
     <label for="c0">Condições</label>
     <div class="conds">
-      {#each [...CONDITIONS, ...conditions.filter((c) => !CONDITIONS.includes(c))] as c, i (c)}
+      {#each [...campaignConditions, ...conditions.filter((c) => !campaignConditions.includes(c))] as c, i (c)}
         <button id={i === 0 ? 'c0' : undefined} class="pill" class:on={conditions.includes(c)} onclick={() => toggle(c)}>{c}</button>
       {/each}
     </div>

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { DEFAULT_ATTRIBUTES, DEFAULT_BAD_WORDS, fieldIdFromLabel, type AttributeDef, type GridSettings } from '@ftt/shared';
+  import { CONDITIONS, DEFAULT_ATTRIBUTES, DEFAULT_BAD_WORDS, fieldIdFromLabel, type AttributeDef, type GridSettings } from '@ftt/shared';
   import type { GmSession } from '../lib/session/gm.svelte';
   import InviteBox from './InviteBox.svelte';
   import { download, exportZip, safeFileName } from '../lib/storage/backup';
@@ -64,6 +64,20 @@
   function removeAttribute(a: AttributeDef) {
     if (!confirm(`Tirar "${a.label}" da campanha? Ele some das fichas (os valores ficam guardados, caso volte).`)) return;
     saveAttributes(($state.snapshot(attributes) as AttributeDef[]).filter((x) => x.id !== a.id));
+  }
+
+  // ---------- condições e iniciativa ----------
+  const NL = String.fromCharCode(10);
+  let conditionsText = $state((gm.settings.conditions ?? CONDITIONS).join(NL));
+
+  function saveConditions() {
+    const list = [...new Set(conditionsText.split(NL).map((c) => c.trim().slice(0, 24)).filter(Boolean))].slice(0, 40);
+    gm.setSettings({ ...($state.snapshot(gm.settings) as typeof gm.settings), conditions: list });
+    gm.toast('Condições atualizadas.');
+  }
+
+  function setOrder(order: 'desc' | 'asc') {
+    gm.setSettings({ ...($state.snapshot(gm.settings) as typeof gm.settings), initiativeOrder: order });
   }
 
   function grid(patch: Partial<GridSettings>) {
@@ -156,6 +170,21 @@
     <div class="row">
       <input bind:value={newAttr} maxlength="30" placeholder="Novo atributo (ex.: Sorte)" onkeydown={(e) => e.key === 'Enter' && addAttribute()} />
       <button onclick={addAttribute} disabled={!newAttr.trim()}>Adicionar</button>
+    </div>
+  </section>
+
+  <section>
+    <h3>Combate</h3>
+    <label for="io">Ordem da iniciativa</label>
+    <select id="io" value={gm.settings.initiativeOrder ?? 'desc'} onchange={(e) => setOrder(e.currentTarget.value as 'desc' | 'asc')}>
+      <option value="desc">Maior primeiro</option>
+      <option value="asc">Menor primeiro</option>
+    </select>
+    <label for="cond">Condições dos tokens (uma por linha)</label>
+    <textarea id="cond" rows="6" bind:value={conditionsText}></textarea>
+    <div class="row">
+      <button onclick={saveConditions}>Salvar condições</button>
+      <button class="ghost" onclick={() => (conditionsText = CONDITIONS.join(NL))}>Lista padrão</button>
     </div>
   </section>
 
