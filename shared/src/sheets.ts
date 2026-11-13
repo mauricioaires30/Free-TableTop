@@ -48,7 +48,19 @@ export interface Sheet {
   kind: 'pc' | 'npc';
   values: Record<string, FieldValue>;
   color?: string;
+  /** Imagem do personagem (hash em imagens/), usada na ficha e no token. */
+  avatar?: string;
 }
+
+/** Ficha de um jogador (tem dono): quem mexe nela é o dono. */
+export function isPlayerSheet(s: Pick<Sheet, 'kind' | 'perm'>): boolean {
+  return s.kind === 'pc' && !!s.perm.owner;
+}
+
+/** Lado máximo da imagem do personagem. */
+export const AVATAR_SIDE = 512;
+/** Tamanho máximo aceito pelo mestre para a imagem enviada por um jogador. */
+export const MAX_AVATAR_BYTES = 600 * 1024;
 
 export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   section: 'Título de seção',

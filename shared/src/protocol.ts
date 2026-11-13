@@ -90,7 +90,8 @@ export type PlayerIntent =
   | { k: 'ruler'; pts: number[] | null }
   | { k: 'ping'; x: number; y: number }
   | { k: 'docEdit'; col: 'journal' | 'wiki'; id: string; patch: { title?: string; text?: string } }
-  | { k: 'tableRoll'; id: string; priv: boolean };
+  | { k: 'tableRoll'; id: string; priv: boolean }
+  | { k: 'avatar'; sheetId: string; i: number; n: number; data: string };
 
 /** Mestre → jogador (já filtrado pelo que o jogador pode ver). */
 export type GmMessage =
@@ -211,6 +212,15 @@ export function parsePlayerIntent(x: unknown): PlayerIntent | null {
         patch.text = x.patch.text;
       }
       return { k: 'docEdit', col: x.col, id: x.id, patch };
+    }
+    case 'avatar': {
+      const n = x.n;
+      const i = x.i;
+      if (!isStr(x.sheetId, 64) || !ID_RE.test(x.sheetId)) return null;
+      if (typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > 4) return null;
+      if (typeof i !== 'number' || !Number.isInteger(i) || i < 0 || i >= n) return null;
+      if (!isStr(x.data, 270_000) || !/^[A-Za-z0-9+/=]+$/.test(x.data)) return null;
+      return { k: 'avatar', sheetId: x.sheetId, i, n, data: x.data };
     }
     case 'tableRoll':
       return isStr(x.id, 64) && ID_RE.test(x.id) ? { k: 'tableRoll', id: x.id, priv: x.priv === true } : null;

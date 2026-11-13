@@ -171,6 +171,8 @@ export abstract class TableSession {
   abstract rollInitiative(sheetId: string): void;
   abstract editNote(col: 'journal' | 'wiki', id: string, patch: { title?: string; text?: string }): void;
   abstract rollTable(id: string, priv: boolean): void;
+  /** Troca a imagem do personagem da ficha. */
+  abstract setAvatar(sheetId: string, file: Blob): Promise<void>;
   abstract sendRuler(pts: number[] | null): void;
   abstract ping(x: number, y: number): void;
   sendCursor(_x: number, _y: number): void {}

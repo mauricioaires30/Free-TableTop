@@ -2,6 +2,7 @@
   import { colorFor, hpOf, type Sheet } from '@ftt/shared';
   import type { TableSession } from '../lib/session/table.svelte';
   import type { GmSession } from '../lib/session/gm.svelte';
+  import Avatar from './Avatar.svelte';
 
   let {
     session,
@@ -67,7 +68,7 @@
   {@const hp = hpOf(s, session.templateOf(s))}
   <li>
     <button class="ghost open" onclick={() => session.openSheet(s.id)}>
-      <span class="dot" style:background={s.perm.owner ? colorFor(s.perm.owner) : 'var(--muted)'}></span>
+      <Avatar {session} hash={s.avatar} name={s.name} size={30} color={s.perm.owner ? colorFor(s.perm.owner) : 'var(--muted)'} />
       <span class="nm">
         <strong>{s.name}</strong>
         <span class="muted">{session.templateOf(s)?.name ?? '?'}{ownerName(s) ? ` · ${ownerName(s)}` : ''}</span>

@@ -42,6 +42,28 @@ export interface BoardItem {
   filled?: number;
 }
 
+/**
+ * Gira um item em torno do próprio centro. O Konva gira pelo canto superior
+ * esquerdo, então a posição é corrigida para o centro não sair do lugar.
+ */
+export function rotateAroundCenter(
+  item: Pick<BoardItem, 'x' | 'y' | 'w' | 'h' | 'rotation'>,
+  deg: number,
+): { x: number; y: number; rotation: number } {
+  const rad = (a: number) => (a * Math.PI) / 180;
+  const off = (a: number) => {
+    const c = Math.cos(rad(a));
+    const s = Math.sin(rad(a));
+    return { x: (item.w / 2) * c - (item.h / 2) * s, y: (item.w / 2) * s + (item.h / 2) * c };
+  };
+  const o1 = off(item.rotation);
+  const cx = item.x + o1.x;
+  const cy = item.y + o1.y;
+  const rotation = (((item.rotation + deg) % 360) + 360) % 360;
+  const o2 = off(rotation);
+  return { x: cx - o2.x, y: cy - o2.y, rotation };
+}
+
 export function layerOf(item: BoardItem): Layer {
   return item.layer ?? (item.type === 'token' ? 'tokens' : 'objects');
 }

@@ -2,6 +2,7 @@
   import { attrModifier, can, colorFor, isResource, numericValue, type FieldValue, type ResourceValue, type TemplateField } from '@ftt/shared';
   import type { TableSession } from '../lib/session/table.svelte';
   import LiveInput from './LiveInput.svelte';
+  import Avatar from './Avatar.svelte';
 
   let {
     session,
@@ -47,6 +48,14 @@
     dragging = null;
   }
 
+  let avatarInput: HTMLInputElement;
+
+  function pickAvatar() {
+    const f = avatarInput.files?.[0];
+    avatarInput.value = '';
+    if (f) void session.setAvatar(id, f);
+  }
+
   function set(fid: string, v: FieldValue) {
     session.setSheet(id, { [fid]: v });
   }
@@ -82,7 +91,16 @@
     aria-label="Ficha de {sheet.name}"
   >
     <header onpointerdown={down} onpointermove={move} onpointerup={up}>
-      <span class="dot" style:background={sheet.color ?? (owner ? colorFor(owner) : 'var(--accent-2)')}></span>
+      <button
+        class="avbtn"
+        disabled={!editable}
+        title={editable ? 'Trocar a imagem do personagem' : sheet.name}
+        aria-label="Imagem do personagem"
+        onclick={() => avatarInput.click()}
+      >
+        <Avatar {session} hash={sheet.avatar} name={sheet.name} size={36} color={sheet.color ?? (owner ? colorFor(owner) : 'var(--accent-2)')} />
+      </button>
+      <input type="file" accept="image/*" hidden bind:this={avatarInput} onchange={pickAvatar} />
       {#if editable}
         <LiveInput class="name" value={sheet.name} maxlength={60} label="Nome" onCommit={(v) => session.setSheet(id, {}, String(v))} />
       {:else}
@@ -200,6 +218,27 @@
   }
   header :global(.name:focus) {
     border-color: var(--accent-2);
+  }
+  .avbtn {
+    padding: 0;
+    border: 0;
+    background: none;
+    border-radius: 50%;
+    position: relative;
+  }
+  .avbtn:disabled {
+    opacity: 1;
+    cursor: default;
+  }
+  .avbtn:not(:disabled):hover::after {
+    content: '📷';
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    background: rgba(0, 0, 0, 0.55);
+    border-radius: 50%;
+    font-size: 14px;
   }
   .badge {
     font-size: 11px;

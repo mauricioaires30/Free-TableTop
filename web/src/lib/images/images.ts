@@ -20,9 +20,9 @@ async function sha(blob: Blob): Promise<string> {
 }
 
 /** Redimensiona (máx. 2048px) e converte para WebP (ou PNG se o navegador não gerar WebP). */
-export async function processImage(file: Blob): Promise<ProcessedImage> {
+export async function processImage(file: Blob, maxSide = MAX_IMAGE_SIDE): Promise<ProcessedImage> {
   const bmp = await createImageBitmap(file);
-  const scale = Math.min(1, MAX_IMAGE_SIDE / Math.max(bmp.width, bmp.height));
+  const scale = Math.min(1, maxSide / Math.max(bmp.width, bmp.height));
   const width = Math.max(1, Math.round(bmp.width * scale));
   const height = Math.max(1, Math.round(bmp.height * scale));
   const canvas = document.createElement('canvas');
@@ -36,13 +36,13 @@ export async function processImage(file: Blob): Promise<ProcessedImage> {
   return { hash: await sha(blob), blob, width, height };
 }
 
-function toBase64(bytes: Uint8Array): string {
+export function toBase64(bytes: Uint8Array): string {
   let bin = '';
   for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   return btoa(bin);
 }
 
-function fromBase64(s: string): Uint8Array<ArrayBuffer> {
+export function fromBase64(s: string): Uint8Array<ArrayBuffer> {
   const bin = atob(s);
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);

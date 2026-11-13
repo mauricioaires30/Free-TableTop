@@ -5,14 +5,14 @@ import {
   FormulaError, itemForPlayer, logVisibleTo, newInvite, newItemId, parsePlayerIntent, PROTOCOL_VERSION,
   resolveFormula, rollDice, sanitizeValues, SHEET_PERM, sortEntries, stepTurn, TEMPLATE_PERM, TEMPLATE_PRESETS,
   TRANSFORM_FIELDS, WordFilter, DEFAULT_TABLES, TABLE_PERM, NOTE_PERM, rollTable as rollRandomTable, logToJournal,
-  MAX_NOTE_TEXT,
+  MAX_NOTE_TEXT, AVATAR_SIDE, MAX_AVATAR_BYTES,
   type Actor, type AnyDoc, type BoardItem, type Collection, type Combat, type CombatEntry, type DocMap,
   type EditPatch, type FieldValue, type FilterConfig, type GmMessage, type LogEntry, type Peer, type Perm,
   type PlayerIntent, type RelayToClient, type Roster, type Sheet, type SheetTemplate, type TableSettings,
   type JournalEntry, type WikiPage, type RandomTable, type FogShape, type GridSettings, type Layer, type MapSettings, type TransformPatch,
 } from '@ftt/shared';
 import { RelayClient } from '../net/client';
-import { GmImages, processImage } from '../images/images';
+import { fromBase64, GmImages, processImage } from '../images/images';
 import { snapToGrid } from '@ftt/shared';
 import { inviteUrl, roomSocketUrl } from '../config';
 import {
@@ -43,6 +43,8 @@ export class GmSession extends TableSession {
   private wf: WordFilter;
   private logByDay = new Map<string, LogEntry[]>();
   private knownPeers = new Set<string>();
+  /** Imagens de personagem chegando em pedaços, por jogador e ficha. */
+  private avatarParts = new Map<string, { n: number; got: Uint8Array<ArrayBuffer>[]; count: number; bytes: number }>();
 
   static async open(store: CampaignStore): Promise<GmSession | null> {
     const campaign = await readCampaign(store);
@@ -213,6 +215,8 @@ export class GmSession extends TableSession {
         return this.ping2(pid, d.x, d.y);
       case 'docEdit':
         return this.applyNoteEdit(actor, d.col, d.id, d.patch);
+      case 'avatar':
+        return this.receiveAvatar(actor, d.sheetId, d.i, d.n, d.data);
       case 'tableRoll':
         if (r?.muted) return this.notify(actor, 'O mestre silenciou você.');
         return this.doTableRoll(actor, d.id, d.priv);
@@ -257,7 +261,9 @@ export class GmSession extends TableSession {
   }
 
   private async sendImage(actor: Actor, hash: string) {
-    const allowed = [...this.items.values()].some((i) => i.img === hash && itemForPlayer(i, actor));
+    const allowed =
+      [...this.items.values()].some((i) => i.img === hash && itemForPlayer(i, actor)) ||
+      Object.values(this.docs.sheets).some((s) => s.avatar === hash && can(actor, 'view', s));
     if (!allowed) return this.sendTo(actor.pid, { k: 'imgMissing', hash });
     const chunks = await this.images.chunks(hash);
     if (!chunks) return this.sendTo(actor.pid, { k: 'imgMissing', hash });
@@ -925,6 +931,50 @@ export class GmSession extends TableSession {
 
   ping(x: number, y: number) {
     this.ping2('gm', x, y);
+  }
+
+  // ---------- imagem do personagem ----------
+
+  private receiveAvatar(actor: Actor, sheetId: string, i: number, n: number, data: string) {
+    const sheet = this.docs.sheets[sheetId];
+    if (!sheet || !this.canEditDoc(actor, sheet)) return this.notify(actor, 'Você não tem permissão para mudar esta ficha.');
+    const key = `${actor.pid}:${sheetId}`;
+    let p = this.avatarParts.get(key);
+    if (!p || p.n !== n) {
+      p = { n, got: new Array(n), count: 0, bytes: 0 };
+      this.avatarParts.set(key, p);
+    }
+    if (p.got[i]) return;
+    const chunk = fromBase64(data);
+    p.bytes += chunk.length;
+    if (p.bytes > MAX_AVATAR_BYTES) {
+      this.avatarParts.delete(key);
+      return this.notify(actor, 'Imagem grande demais.');
+    }
+    p.got[i] = chunk;
+    p.count++;
+    if (p.count < p.n) return;
+    this.avatarParts.delete(key);
+    void this.applyAvatar(actor, sheetId, new Blob(p.got));
+  }
+
+  /** Recodifica a imagem (descarta o que não for imagem), salva e liga à ficha. */
+  private async applyAvatar(actor: Actor, sheetId: string, blob: Blob) {
+    try {
+      const img = await processImage(blob, AVATAR_SIDE);
+      await this.images.save(img);
+      const sheet = this.docs.sheets[sheetId];
+      if (!sheet) return;
+      sheet.avatar = img.hash;
+      this.putDoc('sheets', sheet);
+      this.notify(actor, 'Imagem do personagem atualizada.');
+    } catch {
+      this.notify(actor, 'Essa imagem não pôde ser usada.');
+    }
+  }
+
+  async setAvatar(sheetId: string, file: Blob) {
+    await this.applyAvatar(this.actor, sheetId, file);
   }
 
   // ---------- ferramentas do mestre: relógios, diário, wiki, tabelas ----------

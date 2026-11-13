@@ -105,3 +105,40 @@ describe('combate', () => {
     expect(combatForPlayer(c, { role: 'player', pid: 'ana00000' }, sheets).entries[0].sheetId).toBe('sheet1');
   });
 });
+
+describe('v0.7.0', () => {
+  it('ficha de jogador é a que tem dono', async () => {
+    const { isPlayerSheet } = await import('../src/sheets');
+    expect(isPlayerSheet({ kind: 'pc', perm: { view: 'owner', move: 'gm', edit: 'owner', owner: 'ana00000' } })).toBe(true);
+    expect(isPlayerSheet({ kind: 'pc', perm: { view: 'gm', move: 'gm', edit: 'gm' } })).toBe(false);
+    expect(isPlayerSheet({ kind: 'npc', perm: { view: 'gm', move: 'gm', edit: 'gm', owner: 'x' } })).toBe(false);
+  });
+
+  it('girar mantém o centro no lugar', async () => {
+    const { rotateAroundCenter } = await import('../src/board');
+    let it = { x: 10, y: 20, w: 100, h: 60, rotation: 0 };
+    const center = (i: typeof it) => {
+      const r = (i.rotation * Math.PI) / 180;
+      return [i.x + 50 * Math.cos(r) - 30 * Math.sin(r), i.y + 50 * Math.sin(r) + 30 * Math.cos(r)];
+    };
+    const c0 = center(it);
+    for (let k = 0; k < 4; k++) {
+      it = { ...it, ...rotateAroundCenter(it, 90) };
+      const c = center(it);
+      expect(c[0]).toBeCloseTo(c0[0]);
+      expect(c[1]).toBeCloseTo(c0[1]);
+    }
+    expect(it.rotation).toBe(0);
+    expect(it.x).toBeCloseTo(10);
+    expect(rotateAroundCenter({ ...it, rotation: 10 }, -15).rotation).toBe(355);
+  });
+
+  it('pedaços da imagem do personagem', () => {
+    const ok = { k: 'avatar', sheetId: 'abcd1234', i: 0, n: 2, data: 'QUJD' };
+    expect(parsePlayerIntent(ok)).toEqual(ok);
+    expect(parsePlayerIntent({ ...ok, n: 9 })).toBeNull();
+    expect(parsePlayerIntent({ ...ok, i: 2 })).toBeNull();
+    expect(parsePlayerIntent({ ...ok, data: '<script>' })).toBeNull();
+    expect(parsePlayerIntent({ ...ok, data: 'A'.repeat(300_000) })).toBeNull();
+  });
+});

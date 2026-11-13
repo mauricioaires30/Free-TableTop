@@ -1,11 +1,11 @@
 // Sessão do jogador: manda intenções ao mestre e mostra o que o mestre envia.
 import {
-  can, DiceError, parseDice, PROTOCOL_VERSION, WordFilter,
+  AVATAR_SIDE, can, DiceError, IMAGE_CHUNK_BYTES, MAX_AVATAR_BYTES, parseDice, PROTOCOL_VERSION, WordFilter,
   type AnyDoc, type EditPatch, type FieldValue, type GmMessage, type PlayerIntent, type RelayToClient,
   type TransformPatch,
 } from '@ftt/shared';
 import { RelayClient } from '../net/client';
-import { PlayerImages } from '../images/images';
+import { PlayerImages, processImage, toBase64 } from '../images/images';
 import { roomSocketUrl } from '../config';
 import { emptyDocs, TableSession } from './table.svelte';
 
@@ -212,6 +212,25 @@ export class PlayerSession extends TableSession {
   rollTable(id: string, priv: boolean) {
     if (this.muted) return this.toast('O mestre silenciou você.', 'error');
     if (this.canSend()) this.intent({ k: 'tableRoll', id, priv });
+  }
+
+  async setAvatar(sheetId: string, file: Blob) {
+    const sheet = this.docs.sheets[sheetId];
+    if (!sheet || !can(this.actor, 'edit', sheet) || !this.canSend()) return;
+    try {
+      // Reduz aqui para mandar pouco pela rede; o mestre confere e reprocessa.
+      const img = await processImage(file, AVATAR_SIDE);
+      if (img.blob.size > MAX_AVATAR_BYTES) return this.toast('Imagem grande demais, tente outra.', 'error');
+      const bytes = new Uint8Array(await img.blob.arrayBuffer());
+      const n = Math.max(1, Math.ceil(bytes.length / IMAGE_CHUNK_BYTES));
+      for (let i = 0; i < n; i++) {
+        const data = toBase64(bytes.subarray(i * IMAGE_CHUNK_BYTES, (i + 1) * IMAGE_CHUNK_BYTES));
+        this.intent({ k: 'avatar', sheetId, i, n, data });
+      }
+      this.toast('Enviando imagem…');
+    } catch {
+      this.toast('Não consegui ler essa imagem.', 'error');
+    }
   }
 
   private lastRuler = 0;

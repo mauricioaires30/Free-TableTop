@@ -579,7 +579,7 @@ export class BoardRenderer {
     const ring = item.color ?? (sheet?.perm.owner ? colorFor(sheet.perm.owner) : sheet?.kind === 'npc' ? '#c0392b' : '#d9a75b');
     const ringW = Math.max(3, r * 0.09);
     g.add(new Konva.Circle({ x: r, y: r, radius: r, fill: '#23262f', shadowColor: '#000', shadowBlur: 10, shadowOpacity: 0.5 }));
-    const img = this.imageFor(item.img);
+    const img = this.imageFor(item.img ?? sheet?.avatar);
     if (img instanceof HTMLImageElement) {
       // Cobre o círculo mantendo a proporção da imagem.
       const scale = Math.max((r * 2) / img.width, (r * 2) / img.height);
@@ -674,7 +674,9 @@ export class BoardRenderer {
   private rebuildHash(hash: string) {
     for (const [id, g] of this.nodes) {
       const item = this.s.items.get(id);
-      if (item?.img === hash && this.dragging !== id && this.transforming !== id) this.build(g, item, item.w, item.h);
+      if (!item || this.dragging === id || this.transforming === id) continue;
+      const avatar = item.sheetId ? this.s.docs.sheets[item.sheetId]?.avatar : undefined;
+      if (item.img === hash || (!item.img && avatar === hash)) this.build(g, item, item.w, item.h);
     }
     this.itemsLayer.batchDraw();
   }

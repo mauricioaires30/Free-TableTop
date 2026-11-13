@@ -3,6 +3,7 @@
   import type { TableSession } from '../lib/session/table.svelte';
   import type { GmSession } from '../lib/session/gm.svelte';
   import LiveInput from './LiveInput.svelte';
+  import Avatar from './Avatar.svelte';
 
   let { session, gm = null }: { session: TableSession; gm?: GmSession | null } = $props();
 
@@ -101,7 +102,7 @@
           {:else}
             <span class="init ro">{e.init}</span>
           {/if}
-          <span class="dot" style:background={dot(e)}></span>
+          <Avatar {session} hash={s?.avatar} name={e.name} size={26} color={dot(e)} />
           {#if s}
             <button class="ghost name" onclick={() => session.openSheet(s.id)}>{e.name}</button>
           {:else}
