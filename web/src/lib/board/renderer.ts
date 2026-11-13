@@ -2,7 +2,7 @@
 // seleção, pan/zoom, régua, pings e cursores dos jogadores.
 import Konva from 'konva';
 import {
-  colorFor, drawOrder, formatDistance, gridDistance, hexCenter, hpOf, isHiddenFromPlayers, layerOf, snapToGrid,
+  colorFor, drawOrder, formatDistance, gridDistance, hexCenter, hpOf, isHiddenFromPlayers, layerOf, rotateAroundCenter, snapToGrid,
   TRANSFORM_FIELDS, type BoardItem, type FogShape, type TransformPatch,
 } from '@ftt/shared';
 import type { TableSession } from '../session/table.svelte';
@@ -61,6 +61,7 @@ export class BoardRenderer {
   private myRuler: number[] | null = null;
   private rulerClear: ReturnType<typeof setTimeout> | undefined;
   private fogKey = '';
+  private rotTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(
     private container: HTMLDivElement,
@@ -121,6 +122,16 @@ export class BoardRenderer {
     const st = this.stage;
     st.on('wheel', (e) => {
       e.evt.preventDefault();
+      // Roda em cima do item selecionado gira o item; no resto do quadro dá zoom.
+      if (this.tool === 'select' && this.selected) {
+        const item = this.s.items.get(this.selected);
+        const g = this.nodes.get(this.selected);
+        if (item && g && this.canDrag(item) && g.isAncestorOf(e.target)) {
+          const d = e.evt.deltaY || e.evt.deltaX;
+          if (d) this.rotateBy(item.id, g, (d > 0 ? 1 : -1) * (e.evt.shiftKey ? 1 : 15));
+          return;
+        }
+      }
       const old = st.scaleX();
       const p = st.getPointerPosition();
       if (!p) return;
@@ -373,7 +384,7 @@ export class BoardRenderer {
       });
       const square = item.type === 'image' || item.type === 'token' || item.type === 'clock';
       this.tr.keepRatio(square);
-      this.tr.rotateEnabled(item.type !== 'token');
+      this.tr.rotateEnabled(true);
       this.tr.enabledAnchors(
         square
           ? ['top-left', 'top-right', 'bottom-left', 'bottom-right']
@@ -481,6 +492,22 @@ export class BoardRenderer {
       this.sendTransform(id, { x: g.x(), y: g.y(), w: g.width(), h: g.height(), rotation: g.rotation() }, true);
     });
     return g;
+  }
+
+  private rotateBy(id: string, g: Konva.Group, deg: number) {
+    const r = rotateAroundCenter({ x: g.x(), y: g.y(), w: g.width(), h: g.height(), rotation: g.rotation() }, deg);
+    // Enquanto gira, ignora atualizações do próprio item vindas da rede.
+    this.transforming = id;
+    g.position({ x: r.x, y: r.y });
+    g.rotation(r.rotation);
+    this.tr.forceUpdate();
+    this.itemsLayer.batchDraw();
+    this.sendTransform(id, r, false);
+    clearTimeout(this.rotTimer);
+    this.rotTimer = setTimeout(() => {
+      this.transforming = null;
+      this.sendTransform(id, { x: g.x(), y: g.y(), rotation: g.rotation() }, true);
+    }, 300);
   }
 
   private sendTransform(id: string, patch: Partial<BoardItem>, final: boolean) {
@@ -799,6 +826,7 @@ export class BoardRenderer {
   destroy() {
     cancelAnimationFrame(this.raf);
     clearTimeout(this.rulerClear);
+    clearTimeout(this.rotTimer);
     this.ro.disconnect();
     if (this.s.focusHandler) this.s.focusHandler = null;
     this.stage.destroy();
