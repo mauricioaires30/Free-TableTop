@@ -16,4 +16,4 @@ new_sqlite_classes = ["Room"]
 [vars]
 # Domínios que podem abrir salas, separados por vírgula (ex.: "https://seuusuario.github.io").
 # Vazio = qualquer origem. localhost sempre é permitido para desenvolvimento.
-ALLOWED_ORIGINS = ""
+ALLOWED_ORIGINS = "https://mauricioaires30.github.io"
