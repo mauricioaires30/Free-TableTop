@@ -4,11 +4,12 @@ import {
   applyFilter, can, COLLECTIONS, compactFog, DEFAULT_MAP, simplifyStroke, combatForPlayer, defaultValues, DEFAULT_ITEM_PERM, DiceError, docForPlayer,
   FormulaError, itemForPlayer, logVisibleTo, newInvite, newItemId, parsePlayerIntent, PROTOCOL_VERSION,
   resolveFormula, rollDice, sanitizeValues, SHEET_PERM, sortEntries, stepTurn, TEMPLATE_PERM, TEMPLATE_PRESETS,
-  TRANSFORM_FIELDS, WordFilter,
+  TRANSFORM_FIELDS, WordFilter, DEFAULT_TABLES, TABLE_PERM, NOTE_PERM, rollTable as rollRandomTable, logToJournal,
+  MAX_NOTE_TEXT,
   type Actor, type AnyDoc, type BoardItem, type Collection, type Combat, type CombatEntry, type DocMap,
   type EditPatch, type FieldValue, type FilterConfig, type GmMessage, type LogEntry, type Peer, type Perm,
   type PlayerIntent, type RelayToClient, type Roster, type Sheet, type SheetTemplate, type TableSettings,
-  type FogShape, type GridSettings, type Layer, type MapSettings, type TransformPatch,
+  type JournalEntry, type WikiPage, type RandomTable, type FogShape, type GridSettings, type Layer, type MapSettings, type TransformPatch,
 } from '@ftt/shared';
 import { RelayClient } from '../net/client';
 import { GmImages, processImage } from '../images/images';
@@ -21,7 +22,7 @@ import type { CampaignStore } from '../storage/store';
 import { emptyDocs, TableSession, type Docs } from './table.svelte';
 
 /** Campos que só o mestre muda (além dos que o jogador pode editar). */
-export type GmPatch = EditPatch & Partial<Pick<BoardItem, 'back' | 'revealed' | 'text' | 'title' | 'front' | 'color'>>;
+export type GmPatch = EditPatch & Partial<Pick<BoardItem, 'back' | 'revealed' | 'text' | 'title' | 'front' | 'color' | 'segments'>>;
 
 /** Máximo de fichas que um jogador pode criar sozinho. */
 const MAX_PLAYER_SHEETS = 10;
@@ -56,6 +57,7 @@ export class GmSession extends TableSession {
     const map = await readMap(store);
     const s = new GmSession(store, campaign, items, recent, today, docs, combat, map);
     if (!campaign.seeded) s.seedTemplates();
+    if (!campaign.seededTables) s.seedTables();
     return s;
   }
 
@@ -209,6 +211,11 @@ export class GmSession extends TableSession {
         return this.broadcast({ k: 'ruler', pid, pts: d.pts });
       case 'ping':
         return this.ping2(pid, d.x, d.y);
+      case 'docEdit':
+        return this.applyNoteEdit(actor, d.col, d.id, d.patch);
+      case 'tableRoll':
+        if (r?.muted) return this.notify(actor, 'O mestre silenciou você.');
+        return this.doTableRoll(actor, d.id, d.priv);
     }
   }
 
@@ -370,6 +377,7 @@ export class GmSession extends TableSession {
         clean[f] = r.text;
       }
     }
+    if (clean.filled !== undefined) clean.filled = Math.max(0, Math.min(item.segments ?? 6, clean.filled));
     Object.assign(item, clean);
     this.bump();
     this.broadcastItem(item);
@@ -917,6 +925,116 @@ export class GmSession extends TableSession {
 
   ping(x: number, y: number) {
     this.ping2('gm', x, y);
+  }
+
+  // ---------- ferramentas do mestre: relógios, diário, wiki, tabelas ----------
+
+  addClock(x: number, y: number) {
+    return this.addItem({ type: 'clock', x: x - 80, y: y - 80, w: 160, h: 160, title: 'Relógio', segments: 6, filled: 0 });
+  }
+
+  /** Avança (+1) ou volta (-1) um relógio. */
+  tickClock(id: string, delta: number) {
+    const item = this.items.get(id);
+    if (!item || item.type !== 'clock') return;
+    this.edit(id, { filled: Math.max(0, Math.min(item.segments ?? 6, (item.filled ?? 0) + delta)) });
+  }
+
+  seedTables() {
+    for (const t of DEFAULT_TABLES) this.createTable(t);
+    this.campaign.seededTables = true;
+    this.saveCampaign();
+  }
+
+  createTable(base: Omit<RandomTable, 'id' | 'perm' | 'updatedAt'> = { name: 'Nova tabela', rows: [{ w: 1, text: 'Resultado' }] }) {
+    const t: RandomTable = { ...structuredClone(base), id: newItemId(), perm: structuredClone(TABLE_PERM), updatedAt: Date.now() };
+    this.putDoc('tables', t);
+    return t;
+  }
+
+  saveTable(t: RandomTable) {
+    this.putDoc('tables', structuredClone($state.snapshot(t)) as RandomTable);
+  }
+
+  private doTableRoll(actor: Actor, id: string, priv: boolean) {
+    const t = this.docs.tables[id];
+    if (!t || !can(actor, 'view', t)) return;
+    const all = Object.values($state.snapshot(this.docs.tables) as Record<string, RandomTable>);
+    const byName = (n: string) => all.find((x) => x.name.trim().toLowerCase() === n.toLowerCase());
+    const text = rollRandomTable($state.snapshot(t) as RandomTable, byName);
+    this.addLog({ from: actor.pid, kind: 'table', label: t.name, text, to: priv ? [] : undefined });
+  }
+
+  rollTable(id: string, priv: boolean) {
+    this.doTableRoll(this.actor, id, priv);
+  }
+
+  createJournal(): JournalEntry {
+    const date = todayKey();
+    const n = Object.values(this.docs.journal).length + 1;
+    const e: JournalEntry = {
+      id: newItemId(), perm: structuredClone(NOTE_PERM), updatedAt: Date.now(),
+      title: `Sessão ${n}`, date, text: '',
+    };
+    this.putDoc('journal', e);
+    return e;
+  }
+
+  /** Texto do chat (só o público) do dia da sessão, para começar o resumo. */
+  journalDraft(date: string): string {
+    return logToJournal($state.snapshot(this.log).filter((e) => todayKey(new Date(e.ts)) === date));
+  }
+
+  createWiki(title = 'Nova página'): WikiPage {
+    const p: WikiPage = { id: newItemId(), perm: structuredClone(NOTE_PERM), updatedAt: Date.now(), title: title.slice(0, 120), text: '', tags: [] };
+    this.putDoc('wiki', p);
+    return p;
+  }
+
+  setNoteDate(id: string, date: string) {
+    const e = this.docs.journal[id];
+    if (!e || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+    e.date = date;
+    this.saveDoc('journal', id);
+    this.broadcastDoc('journal', id);
+  }
+
+  setWikiTags(id: string, tags: string[]) {
+    const p = this.docs.wiki[id];
+    if (!p) return;
+    p.tags = tags.map((t) => t.trim().slice(0, 30)).filter(Boolean).slice(0, 12);
+    this.saveDoc('wiki', id);
+    this.broadcastDoc('wiki', id);
+  }
+
+  private applyNoteEdit(actor: Actor, col: 'journal' | 'wiki', id: string, patch: { title?: string; text?: string }) {
+    const d = this.docs[col][id];
+    if (!d) return;
+    if (!this.canEditDoc(actor, d)) {
+      this.notify(actor, 'Você não tem permissão para editar esta página.');
+      if (actor.role === 'player' && can(actor, 'view', d)) this.sendTo(actor.pid, { k: 'doc', col, doc: $state.snapshot(d) as AnyDoc });
+      return;
+    }
+    const clean: { title?: string; text?: string } = {};
+    if (patch.title !== undefined) clean.title = patch.title.slice(0, 120);
+    if (patch.text !== undefined) clean.text = patch.text.slice(0, MAX_NOTE_TEXT);
+    if (actor.role === 'player') {
+      for (const k of ['title', 'text'] as const) {
+        const v = clean[k];
+        if (!v) continue;
+        const f = applyFilter(this.filter, v, this.wf);
+        if (!f.ok) return this.notify(actor, f.reason);
+        clean[k] = f.text;
+      }
+    }
+    Object.assign(d, clean);
+    d.updatedAt = Date.now();
+    this.saveDoc(col, id);
+    this.broadcastDoc(col, id);
+  }
+
+  editNote(col: 'journal' | 'wiki', id: string, patch: { title?: string; text?: string }) {
+    this.applyNoteEdit(this.actor, col, id, patch);
   }
 
   // ---------- persistência ----------

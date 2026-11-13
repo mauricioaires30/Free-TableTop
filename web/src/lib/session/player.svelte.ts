@@ -97,6 +97,7 @@ export class PlayerSession extends TableSession {
       case 'docRemove':
         delete this.docs[d.col][d.id];
         if (d.col === 'sheets') this.closeSheet(d.id);
+        if (d.col === 'journal' || d.col === 'wiki') this.closeNote(d.id);
         break;
       case 'combat':
         this.combat = d.combat;
@@ -199,6 +200,18 @@ export class PlayerSession extends TableSession {
 
   rollInitiative(sheetId: string) {
     if (this.canSend()) this.intent({ k: 'initRoll', sheetId });
+  }
+
+  editNote(col: 'journal' | 'wiki', id: string, patch: { title?: string; text?: string }) {
+    const d = this.docs[col][id];
+    if (!d || !can(this.actor, 'edit', d) || !this.canSend()) return;
+    Object.assign(d, patch);
+    this.intent({ k: 'docEdit', col, id, patch });
+  }
+
+  rollTable(id: string, priv: boolean) {
+    if (this.muted) return this.toast('O mestre silenciou você.', 'error');
+    if (this.canSend()) this.intent({ k: 'tableRoll', id, priv });
   }
 
   private lastRuler = 0;

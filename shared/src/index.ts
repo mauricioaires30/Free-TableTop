@@ -8,3 +8,5 @@ export * from './sheets';
 export * from './combat';
 export * from './docs';
 export * from './map';
+export * from './tables';
+export * from './notes';

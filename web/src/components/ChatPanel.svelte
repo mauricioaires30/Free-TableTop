@@ -57,7 +57,10 @@
           {#if p}<span class="tag">🔒 {p}</span>{/if}
           <span class="time">{time(e.ts)}</span>
         </div>
-        {#if e.kind === 'roll' && e.roll}
+        {#if e.kind === 'table'}
+          <div class="label">🎲 {e.label}</div>
+          <div class="table-result">{e.text}</div>
+        {:else if e.kind === 'roll' && e.roll}
           {#if e.label}<div class="label">{e.label}</div>{/if}
           <RollView roll={e.roll} />
         {:else}
@@ -141,6 +144,15 @@
     font-size: 12px;
     color: var(--accent-2);
     margin-top: 2px;
+  }
+  .table-result {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent-2);
+    border-radius: 8px;
+    padding: 6px 10px;
+    margin-top: 3px;
+    white-space: pre-wrap;
   }
   .text {
     white-space: pre-wrap;

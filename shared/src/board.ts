@@ -1,7 +1,7 @@
 import type { Perm } from './permissions';
 import { can, type Actor } from './permissions';
 
-export type ItemType = 'image' | 'note' | 'card' | 'token';
+export type ItemType = 'image' | 'note' | 'card' | 'token' | 'clock';
 
 /** Camadas do quadro, de baixo para cima. */
 export type Layer = 'map' | 'objects' | 'tokens';
@@ -37,6 +37,9 @@ export interface BoardItem {
   name?: string;
   sheetId?: string;
   conditions?: string[];
+  /** clock: relógio de progresso com N fatias, `filled` preenchidas. */
+  segments?: number;
+  filled?: number;
 }
 
 export function layerOf(item: BoardItem): Layer {
@@ -49,7 +52,7 @@ export function drawOrder(a: BoardItem, b: BoardItem): number {
 }
 
 /** Campos que o jogador pode alterar via "edit" (o resto só o mestre). */
-export const PLAYER_EDITABLE_FIELDS = ['text', 'title', 'front', 'color', 'name', 'conditions'] as const;
+export const PLAYER_EDITABLE_FIELDS = ['text', 'title', 'front', 'color', 'name', 'conditions', 'filled'] as const;
 export const TRANSFORM_FIELDS = ['x', 'y', 'w', 'h', 'rotation'] as const;
 
 export type TransformPatch = Partial<Pick<BoardItem, (typeof TRANSFORM_FIELDS)[number]>>;

@@ -18,6 +18,8 @@
   import CombatPanel from '../components/CombatPanel.svelte';
   import ToolPalette from '../components/ToolPalette.svelte';
   import TokenDialog from '../components/TokenDialog.svelte';
+  import NotesPanel from '../components/NotesPanel.svelte';
+  import NoteWindow from '../components/NoteWindow.svelte';
 
   let { session, gm = null, onLeave }: { session: TableSession; gm?: GmSession | null; onLeave?: () => void } = $props();
 
@@ -30,7 +32,8 @@
   let tokenEditing = $state<BoardItem | null>(null);
   /** O seletor de arquivo serve para imagens novas ou para a imagem de um token. */
   let tokenImageFor: string | null = null;
-  type Tab = 'chat' | 'sheets' | 'combat' | 'players' | 'settings';
+  type Tab = 'chat' | 'sheets' | 'combat' | 'notes' | 'players' | 'settings';
+  let permNote = $state<{ col: 'journal' | 'wiki' | 'tables'; id: string } | null>(null);
   let tab = $state<Tab>('chat');
   let showTemplates = $state(false);
   let permSheet = $state<string | null>(null);
@@ -99,6 +102,13 @@
   function openEdit(id: string) {
     const item = session.items.get(id);
     if (!item || item.type === 'image' || !session.can('edit', item)) return;
+    if (item.type === 'clock') {
+      // Duplo clique avança o relógio (volta ao zero depois de cheio).
+      const n = item.segments ?? 6;
+      const f = item.filled ?? 0;
+      session.edit(id, { filled: f >= n ? 0 : f + 1 });
+      return;
+    }
     if (item.type === 'token') tokenEditing = $state.snapshot(item) as BoardItem;
     else editing = { ...item };
   }
@@ -114,11 +124,18 @@
           { label: '🃏 Nova carta aqui', action: () => gm.addCard(p.x, p.y) },
           { label: '🖼️ Imagem aqui…', action: () => pickImage(p) },
           { label: '🪙 Token aqui', action: () => gm.addToken(p.x, p.y) },
+          { label: '⏱️ Relógio aqui', action: () => gm.addClock(p.x, p.y) },
         );
       }
       items.push({ label: '🔍 Ver tudo', action: () => renderer?.fitAll(), divider: !!gm });
     } else {
-      if (item.type !== 'image' && session.can('edit', item)) {
+      if (item.type === 'clock' && session.can('edit', item)) {
+        items.push(
+          { label: '➕ Avançar relógio', action: () => session.edit(item.id, { filled: Math.min(item.segments ?? 6, (item.filled ?? 0) + 1) }) },
+          { label: '➖ Voltar relógio', action: () => session.edit(item.id, { filled: Math.max(0, (item.filled ?? 0) - 1) }) },
+        );
+        if (gm) items.push({ label: '✏️ Editar relógio', action: () => (editing = { ...item }) });
+      } else if (item.type !== 'image' && session.can('edit', item)) {
         items.push({ label: item.type === 'token' ? '✏️ Nome e condições' : '✏️ Editar', action: () => openEdit(item.id) });
       }
       if (item.type === 'token' && item.sheetId && session.docs.sheets[item.sheetId]) {
@@ -246,6 +263,7 @@
           <button class:on={tab === 'combat'} onclick={() => (tab = 'combat')}>
             Combate{#if session.combat.active}<span class="live" title="Combate em andamento"></span>{/if}
           </button>
+          <button class:on={tab === 'notes'} onclick={() => (tab = 'notes')} title="Diário, wiki e tabelas">Notas</button>
           <button class:on={tab === 'players'} onclick={() => (tab = 'players')} title="Jogadores">Grupo ({onlineCount})</button>
           {#if gm}<button class:on={tab === 'settings'} onclick={() => (tab = 'settings')} title="Configurações da mesa">Mesa</button>{/if}
         </nav>
@@ -256,6 +274,8 @@
             <SheetsPanel {session} {gm} onTemplates={() => (showTemplates = true)} onPerm={(id) => (permSheet = id)} onPlace={placeSheet} />
           {:else if tab === 'combat'}
             <CombatPanel {session} {gm} />
+          {:else if tab === 'notes'}
+            <NotesPanel {session} {gm} onPerm={(col, id) => (permNote = { col, id })} />
           {:else if tab === 'players'}
             <PlayersPanel {session} {gm} />
           {:else if gm}
@@ -291,6 +311,30 @@
       onPerm={gm ? (sid) => (permSheet = sid) : undefined}
     />
   {/each}
+  {#each session.openNotes as n, i (n.id)}
+    <NoteWindow
+      {session}
+      {gm}
+      col={n.col}
+      id={n.id}
+      index={i}
+      z={windowZ(n.id)}
+      onFocus={() => focusSheet(n.id)}
+      onPerm={gm ? () => (permNote = { col: n.col, id: n.id }) : undefined}
+    />
+  {/each}
+  {#if permNote && gm && gm.docs[permNote.col][permNote.id]}
+    {@const pn = permNote}
+    <PermissionDialog
+      {gm}
+      title={pn.col === 'tables' ? 'Quem pode rolar esta tabela' : 'Quem vê e edita esta página'}
+      perm={gm.docs[pn.col][pn.id].perm}
+      keys={pn.col === 'tables' ? ['view'] : ['view', 'edit']}
+      hints={{ view: pn.col === 'tables' ? 'Quem vê a tabela pode rolá-la.' : 'Quem não pode ver não recebe nada desta página.', edit: 'Mudar título e texto.' }}
+      onSave={(p) => gm.setDocPerm(pn.col, pn.id, p)}
+      onClose={() => (permNote = null)}
+    />
+  {/if}
   {#if showTemplates && gm}
     <TemplateEditor {gm} onClose={() => (showTemplates = false)} />
   {/if}
@@ -411,14 +455,15 @@
     border-bottom: 1px solid var(--border);
   }
   .tabs button {
-    flex: 1;
+    flex: 1 1 auto;
     border: 0;
     border-radius: 0;
     background: transparent;
-    padding: 10px 6px;
+    padding: 10px 4px;
     color: var(--muted);
     border-bottom: 2px solid transparent;
-    font-size: 13px;
+    font-size: 12px;
+    white-space: nowrap;
   }
   .live {
     display: inline-block;

@@ -20,6 +20,8 @@ export interface CampaignFile {
   settings?: TableSettings;
   /** Já criou os modelos de ficha prontos (não recria se o mestre apagar todos). */
   seeded?: boolean;
+  /** Já criou as tabelas aleatórias prontas. */
+  seededTables?: boolean;
 }
 
 export interface BoardFile {
@@ -64,7 +66,7 @@ export async function readCampaign(store: CampaignStore): Promise<CampaignFile |
 export async function readBoard(store: CampaignStore): Promise<BoardItem[]> {
   const txt = await store.readText(PATHS.board);
   if (!txt) return [];
-  const DEF = { note: [220, 180], card: [260, 340], image: [300, 300], token: [70, 70] } as const;
+  const DEF = { note: [220, 180], card: [260, 340], image: [300, 300], token: [70, 70], clock: [160, 160] } as const;
   const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
   return ((JSON.parse(txt) as BoardFile).items ?? [])
     .filter((i) => i && typeof i.id === 'string' && i.type in DEF && i.perm)

@@ -2,21 +2,29 @@
 // Ficam em pastas próprias na pasta do mestre e são sincronizados um a um.
 import { can, type Actor, type Perm } from './permissions';
 import type { Sheet, SheetTemplate } from './sheets';
+import type { JournalEntry, WikiPage } from './notes';
+import type { RandomTable } from './tables';
 
 export interface DocMap {
   templates: SheetTemplate;
   sheets: Sheet;
+  journal: JournalEntry;
+  wiki: WikiPage;
+  tables: RandomTable;
 }
 
 export type Collection = keyof DocMap;
 export type AnyDoc = DocMap[Collection];
 
-export const COLLECTIONS: Collection[] = ['templates', 'sheets'];
+export const COLLECTIONS: Collection[] = ['templates', 'sheets', 'journal', 'wiki', 'tables'];
 
 /** Pasta de cada coleção dentro da pasta da campanha. */
 export const COLLECTION_DIRS: Record<Collection, string> = {
   templates: 'modelos',
   sheets: 'fichas',
+  journal: 'diario',
+  wiki: 'wiki',
+  tables: 'tabelas',
 };
 
 export interface TableSettings {

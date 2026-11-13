@@ -30,6 +30,7 @@ const MIN_SIZE: Record<BoardItem['type'], { w: number; h: number }> = {
   card: { w: 140, h: 120 },
   image: { w: 30, h: 30 },
   token: { w: 20, h: 20 },
+  clock: { w: 60, h: 60 },
 };
 const CURSOR_PATH = 'M0 0 L0 17 L4.5 13 L7.5 20 L10.5 18.8 L7.6 12 L13 12 Z';
 const SQRT3 = Math.sqrt(3);
@@ -370,7 +371,7 @@ export class BoardRenderer {
         const sc = this.stage.scaleX();
         return Math.abs(newBox.width) < min.w * sc || Math.abs(newBox.height) < min.h * sc ? oldBox : newBox;
       });
-      const square = item.type === 'image' || item.type === 'token';
+      const square = item.type === 'image' || item.type === 'token' || item.type === 'clock';
       this.tr.keepRatio(square);
       this.tr.rotateEnabled(item.type !== 'token');
       this.tr.enabledAnchors(
@@ -557,6 +558,8 @@ export class BoardRenderer {
       }
     } else if (item.type === 'token') {
       this.buildToken(g, item, w, h);
+    } else if (item.type === 'clock') {
+      this.buildClock(g, item, w, h);
     }
 
     if (hidden) {
@@ -624,6 +627,29 @@ export class BoardRenderer {
       c.x(r - c.width() / 2);
       g.add(c);
     }
+  }
+
+  /** Relógio de progresso: fatias preenchidas no sentido horário a partir do topo. */
+  private buildClock(g: Konva.Group, item: BoardItem, w: number, h: number) {
+    const n = Math.max(2, Math.min(24, item.segments ?? 6));
+    const filled = Math.max(0, Math.min(n, item.filled ?? 0));
+    const r = Math.min(w, h) / 2;
+    const color = item.color ?? '#c0392b';
+    g.add(new Konva.Circle({ x: r, y: r, radius: r, fill: '#1d2129', shadowColor: '#000', shadowBlur: 12, shadowOpacity: 0.5 }));
+    for (let i = 0; i < n; i++) {
+      g.add(new Konva.Wedge({
+        x: r, y: r, radius: r - 5, angle: 360 / n, rotation: -90 + (i * 360) / n,
+        fill: i < filled ? color : '#2a2f3a', stroke: '#0e1014', strokeWidth: 2,
+      }));
+    }
+    g.add(new Konva.Circle({ x: r, y: r, radius: r - 2, stroke: filled === n ? color : '#ebe5d8', strokeWidth: 3 }));
+    const lbl = new Konva.Label({ y: r * 2 + 6 });
+    lbl.add(
+      new Konva.Tag({ fill: '#000', opacity: 0.7, cornerRadius: 4 }),
+      new Konva.Text({ text: `${item.title ?? 'Relógio'} · ${filled}/${n}`, fontSize: 13, padding: 4, fill: '#fff', fontFamily: 'Inter, sans-serif' }),
+    );
+    lbl.x(r - lbl.width() / 2);
+    g.add(lbl);
   }
 
   private async loadImage(hash: string) {

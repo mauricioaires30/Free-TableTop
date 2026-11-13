@@ -11,14 +11,21 @@
   let front = $state(item.front ?? '');
   let back = $state(item.back ?? '');
   let revealed = $state(!!item.revealed);
-  let color = $state(item.color ?? (item.type === 'card' ? '#efe4cc' : '#f5e6a8'));
+  let color = $state(item.color ?? (item.type === 'card' ? '#efe4cc' : item.type === 'clock' ? '#c0392b' : '#f5e6a8'));
+  let segments = $state(item.segments ?? 6);
 
   const COLORS = item.type === 'card'
     ? ['#efe4cc', '#e6d3b3', '#d9e2ec', '#e8d5d5', '#dfe8d5']
-    : ['#f5e6a8', '#f7c6c7', '#c9e4c5', '#c6dbf0', '#e2d1f0', '#ffffff'];
+    : item.type === 'clock'
+      ? ['#c0392b', '#d9a75b', '#4caf7a', '#2e86de', '#8e44ad']
+      : ['#f5e6a8', '#f7c6c7', '#c9e4c5', '#c6dbf0', '#e2d1f0', '#ffffff'];
 
   function save() {
-    if (item.type === 'note') session.edit(item.id, { text, color });
+    if (item.type === 'clock') {
+      const n = Math.max(2, Math.min(24, segments));
+      const patch: GmPatch = { title, color, segments: n, filled: Math.min(n, item.filled ?? 0) };
+      session.edit(item.id, patch);
+    } else if (item.type === 'note') session.edit(item.id, { text, color });
     else if (item.type === 'card') {
       // O verso e "revelado" só são aceitos quando quem edita é o mestre.
       const patch: GmPatch = gm ? { title, front, color, back, revealed } : { title, front, color };
@@ -30,9 +37,18 @@
 
 <div class="scrim" role="presentation" onclick={(e) => e.target === e.currentTarget && onClose()} onkeydown={(e) => e.key === 'Escape' && onClose()}>
   <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="edit-title">
-    <h2 id="edit-title">{item.type === 'note' ? 'Editar nota' : 'Editar carta'}</h2>
+    <h2 id="edit-title">{item.type === 'note' ? 'Editar nota' : item.type === 'clock' ? 'Relógio de progresso' : 'Editar carta'}</h2>
 
-    {#if item.type === 'note'}
+    {#if item.type === 'clock'}
+      <label for="ct">Nome</label>
+      <!-- svelte-ignore a11y_autofocus -->
+      <input id="ct" bind:value={title} maxlength="60" autofocus placeholder="Ex.: A guarda chega" />
+      <label for="cs">Fatias</label>
+      <select id="cs" bind:value={segments}>
+        {#each [2, 3, 4, 6, 8, 10, 12] as n (n)}<option value={n}>{n}</option>{/each}
+      </select>
+      <p class="muted small">Duplo clique no relógio avança uma fatia. Botão direito para voltar.</p>
+    {:else if item.type === 'note'}
       <label for="t">Texto</label>
       <!-- svelte-ignore a11y_autofocus -->
       <textarea id="t" rows="7" bind:value={text} maxlength="4000" autofocus></textarea>

@@ -65,6 +65,8 @@ export abstract class TableSession {
   pings: Ping[] = [];
   /** Fichas abertas como janelas sobre o quadro (só interface). */
   openSheets = $state<string[]>([]);
+  /** Páginas do diário/wiki abertas como janelas. */
+  openNotes = $state<Array<{ col: 'journal' | 'wiki'; id: string }>>([]);
 
   items = new Map<string, BoardItem>();
   cursors = new Map<string, CursorState>();
@@ -138,6 +140,20 @@ export abstract class TableSession {
     this.openSheets = this.openSheets.filter((x) => x !== id);
   }
 
+  openNote(col: 'journal' | 'wiki', id: string) {
+    this.openNotes = [...this.openNotes.filter((n) => n.id !== id), { col, id }];
+  }
+
+  closeNote(id: string) {
+    this.openNotes = this.openNotes.filter((n) => n.id !== id);
+  }
+
+  /** Página da wiki pelo título (sem diferenciar maiúsculas). */
+  wikiByTitle(title: string) {
+    const t = title.trim().toLowerCase();
+    return Object.values(this.docs.wiki).find((p) => p.title.trim().toLowerCase() === t);
+  }
+
   maxZ(): number {
     let z = 0;
     for (const i of this.items.values()) z = Math.max(z, i.z);
@@ -153,6 +169,8 @@ export abstract class TableSession {
   abstract setSheet(id: string, values: Record<string, FieldValue>, name?: string): void;
   abstract rollSheet(id: string, field: string, priv: boolean): void;
   abstract rollInitiative(sheetId: string): void;
+  abstract editNote(col: 'journal' | 'wiki', id: string, patch: { title?: string; text?: string }): void;
+  abstract rollTable(id: string, priv: boolean): void;
   abstract sendRuler(pts: number[] | null): void;
   abstract ping(x: number, y: number): void;
   sendCursor(_x: number, _y: number): void {}

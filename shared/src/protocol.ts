@@ -60,7 +60,7 @@ export interface LogEntry {
   /** 'gm' ou o pid do jogador. */
   from: string;
   name: string;
-  kind: 'chat' | 'roll' | 'system';
+  kind: 'chat' | 'roll' | 'system' | 'table';
   text?: string;
   roll?: RollResult;
   /** O que foi rolado, ex.: "Força" ou "Iniciativa". */
@@ -88,7 +88,9 @@ export type PlayerIntent =
   | { k: 'sheetRoll'; id: string; field: string; priv: boolean }
   | { k: 'initRoll'; sheetId: string }
   | { k: 'ruler'; pts: number[] | null }
-  | { k: 'ping'; x: number; y: number };
+  | { k: 'ping'; x: number; y: number }
+  | { k: 'docEdit'; col: 'journal' | 'wiki'; id: string; patch: { title?: string; text?: string } }
+  | { k: 'tableRoll'; id: string; priv: boolean };
 
 /** Mestre → jogador (já filtrado pelo que o jogador pode ver). */
 export type GmMessage =
@@ -153,6 +155,11 @@ export function parsePlayerIntent(x: unknown): PlayerIntent | null {
       for (const f of PLAYER_EDITABLE_FIELDS) {
         const v = x.patch[f];
         if (v === undefined) continue;
+        if (f === 'filled') {
+          if (typeof v !== 'number' || !Number.isInteger(v) || v < 0 || v > 24) return null;
+          patch.filled = v;
+          continue;
+        }
         if (f === 'conditions') {
           if (!Array.isArray(v) || v.length > 12 || !v.every((c) => isStr(c, 24))) return null;
           patch.conditions = v as string[];
@@ -192,6 +199,21 @@ export function parsePlayerIntent(x: unknown): PlayerIntent | null {
         : null;
     case 'ping':
       return isNum(x.x) && isNum(x.y) ? { k: 'ping', x: x.x, y: x.y } : null;
+    case 'docEdit': {
+      if ((x.col !== 'journal' && x.col !== 'wiki') || !isStr(x.id, 64) || !ID_RE.test(x.id) || !isObj(x.patch)) return null;
+      const patch: { title?: string; text?: string } = {};
+      if (x.patch.title !== undefined) {
+        if (!isStr(x.patch.title, 120)) return null;
+        patch.title = x.patch.title;
+      }
+      if (x.patch.text !== undefined) {
+        if (!isStr(x.patch.text, 50_000)) return null;
+        patch.text = x.patch.text;
+      }
+      return { k: 'docEdit', col: x.col, id: x.id, patch };
+    }
+    case 'tableRoll':
+      return isStr(x.id, 64) && ID_RE.test(x.id) ? { k: 'tableRoll', id: x.id, priv: x.priv === true } : null;
   }
   return null;
 }
