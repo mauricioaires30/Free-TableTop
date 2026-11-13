@@ -1,7 +1,7 @@
 // Documentos da campanha (fichas, modelos...), cada um com suas permissões.
 // Ficam em pastas próprias na pasta do mestre e são sincronizados um a um.
 import { can, type Actor, type Perm } from './permissions';
-import type { Sheet, SheetTemplate } from './sheets';
+import { DEFAULT_ATTRIBUTES, type AttributeDef, type Sheet, type SheetTemplate } from './sheets';
 import type { JournalEntry, WikiPage } from './notes';
 import type { RandomTable } from './tables';
 
@@ -30,9 +30,11 @@ export const COLLECTION_DIRS: Record<Collection, string> = {
 export interface TableSettings {
   /** Jogadores podem criar a própria ficha. */
   allowPlayerSheets: boolean;
+  /** Atributos que existem nesta campanha (o mestre define; os modelos escolhem quais usar). */
+  attributes: AttributeDef[];
 }
 
-export const DEFAULT_SETTINGS: TableSettings = { allowPlayerSheets: true };
+export const DEFAULT_SETTINGS: TableSettings = { allowPlayerSheets: true, attributes: DEFAULT_ATTRIBUTES };
 
 export function docForPlayer<T extends { perm: Perm }>(doc: T, actor: Actor): T | null {
   return can(actor, 'view', doc) ? doc : null;

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { DEFAULT_BAD_WORDS, type GridSettings } from '@ftt/shared';
+  import { DEFAULT_ATTRIBUTES, DEFAULT_BAD_WORDS, fieldIdFromLabel, type AttributeDef, type GridSettings } from '@ftt/shared';
   import type { GmSession } from '../lib/session/gm.svelte';
   import InviteBox from './InviteBox.svelte';
   import { download, exportZip, safeFileName } from '../lib/storage/backup';
@@ -36,6 +36,34 @@
     } finally {
       exporting = false;
     }
+  }
+
+  // ---------- atributos da campanha ----------
+  const attributes = $derived(gm.settings.attributes ?? DEFAULT_ATTRIBUTES);
+  let newAttr = $state('');
+
+  function saveAttributes(list: AttributeDef[]) {
+    gm.setSettings({ ...($state.snapshot(gm.settings) as typeof gm.settings), attributes: list });
+  }
+
+  function addAttribute() {
+    const label = newAttr.trim().slice(0, 30);
+    if (!label) return;
+    // O código não pode colidir com outro atributo nem com campos dos modelos (ex.: {pv}).
+    const taken = new Set([...attributes.map((a) => a.id), ...Object.values(gm.docs.templates).flatMap((t) => t.fields.map((f) => f.id))]);
+    saveAttributes([...($state.snapshot(attributes) as AttributeDef[]), { id: fieldIdFromLabel(label, taken), label }]);
+    newAttr = '';
+  }
+
+  function renameAttribute(id: string, label: string) {
+    const l = label.trim().slice(0, 30);
+    if (!l) return;
+    saveAttributes(($state.snapshot(attributes) as AttributeDef[]).map((a) => (a.id === id ? { ...a, label: l } : a)));
+  }
+
+  function removeAttribute(a: AttributeDef) {
+    if (!confirm(`Tirar "${a.label}" da campanha? Ele some das fichas (os valores ficam guardados, caso volte).`)) return;
+    saveAttributes(($state.snapshot(attributes) as AttributeDef[]).filter((x) => x.id !== a.id));
   }
 
   function grid(patch: Partial<GridSettings>) {
@@ -112,6 +140,26 @@
   </section>
 
   <section>
+    <h3>Atributos da campanha</h3>
+    <p class="muted small">
+      Os atributos que existem no seu sistema. Cada modelo de ficha escolhe quais destes usa; os jogadores só preenchem os valores.
+    </p>
+    <ul class="attrs">
+      {#each attributes as a (a.id)}
+        <li>
+          <input value={a.label} maxlength="30" aria-label="Nome do atributo" onchange={(e) => renameAttribute(a.id, e.currentTarget.value)} />
+          <code title="Use nas fórmulas">&#123;{a.id}&#125;</code>
+          <button class="ghost danger small-btn" title="Tirar da campanha" aria-label="Tirar {a.label}" onclick={() => removeAttribute(a)}>✕</button>
+        </li>
+      {/each}
+    </ul>
+    <div class="row">
+      <input bind:value={newAttr} maxlength="30" placeholder="Novo atributo (ex.: Sorte)" onkeydown={(e) => e.key === 'Enter' && addAttribute()} />
+      <button onclick={addAttribute} disabled={!newAttr.trim()}>Adicionar</button>
+    </div>
+  </section>
+
+  <section>
     <h3>Fichas</h3>
     <label class="check">
       <input
@@ -181,6 +229,30 @@
   }
   input[type='range'] {
     width: 100%;
+  }
+  .attrs {
+    list-style: none;
+    padding: 0;
+    margin: 6px 0 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .attrs li {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .attrs input {
+    padding: 5px 8px;
+  }
+  .attrs code {
+    font-size: 11px;
+    color: var(--accent-2);
+    white-space: nowrap;
+  }
+  .small-btn {
+    padding: 3px 7px;
   }
   textarea {
     font-family: ui-monospace, monospace;

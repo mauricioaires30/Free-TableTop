@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  defaultValues, fieldIdFromLabel, FormulaError, resolveFormula, sanitizeValues, TEMPLATE_PRESETS,
-  type Sheet, type SheetTemplate,
+  DEFAULT_ATTRIBUTES as A, defaultValues, fieldIdFromLabel, FormulaError, resolveFormula, sanitizeValues, templateAttrs,
+  TEMPLATE_PRESETS, type Sheet, type SheetTemplate,
 } from '../src/sheets';
 import { combatForPlayer, sortEntries, stepTurn, type Combat } from '../src/combat';
 import { parseDice } from '../src/dice';
@@ -10,7 +10,7 @@ import { parsePlayerIntent } from '../src/protocol';
 const tpl = (i: number): SheetTemplate => ({ ...TEMPLATE_PRESETS[i], id: 'tpl1', perm: { view: 'all', move: 'gm', edit: 'gm' }, updatedAt: 0 });
 const sheetOf = (t: SheetTemplate, values: Sheet['values'] = {}): Sheet => ({
   id: 'sheet1', perm: { view: 'owner', move: 'gm', edit: 'owner', owner: 'ana00000' }, updatedAt: 0,
-  templateId: t.id, name: 'Ana', kind: 'pc', values: { ...defaultValues(t), ...values },
+  templateId: t.id, name: 'Ana', kind: 'pc', values: { ...defaultValues(t, A), ...values },
 });
 
 describe('fichas', () => {
@@ -18,13 +18,13 @@ describe('fichas', () => {
     for (let i = 0; i < TEMPLATE_PRESETS.length; i++) {
       const t = tpl(i);
       const s = sheetOf(t);
+      const ta = templateAttrs(t, A);
+      for (const { def } of ta) s.values[def.id] = 2;
       for (const f of t.fields) {
-        if (f.type === 'attr') s.values[f.id] = 2;
+        if (f.roll && f.type !== 'attrs') expect(() => parseDice(resolveFormula(f.roll!, s, t, f.id, A)), f.roll).not.toThrow();
       }
-      for (const f of t.fields) {
-        if (f.roll) expect(() => parseDice(resolveFormula(f.roll!, s, t, f.id)), f.roll).not.toThrow();
-      }
-      if (t.initiative) expect(() => parseDice(resolveFormula(t.initiative!, s, t))).not.toThrow();
+      for (const { def, block } of ta) expect(() => parseDice(resolveFormula(block.roll!, s, t, def.id, A)), block.roll).not.toThrow();
+      if (t.initiative) expect(() => parseDice(resolveFormula(t.initiative!, s, t, undefined, A))).not.toThrow();
       const ids = t.fields.map((f) => f.id);
       expect(new Set(ids).size).toBe(ids.length);
     }
@@ -33,17 +33,19 @@ describe('fichas', () => {
   it('modificador estilo d20', () => {
     const t = tpl(1);
     const s = sheetOf(t, { des: 14, for: 8 });
-    expect(resolveFormula('1d20+{mod}', s, t, 'des')).toBe('1d20+2');
-    expect(resolveFormula('1d20+{mod}', s, t, 'for')).toBe('1d20-1');
-    expect(resolveFormula(t.initiative!, s, t)).toBe('1d20+2');
-    expect(resolveFormula('{pv.max}', s, t)).toBe('10');
+    expect(resolveFormula('1d20+{mod}', s, t, 'des', A)).toBe('1d20+2');
+    expect(resolveFormula('1d20+{mod}', s, t, 'for', A)).toBe('1d20-1');
+    expect(resolveFormula(t.initiative!, s, t, undefined, A)).toBe('1d20+2');
+    expect(resolveFormula('{pv.max}', s, t, undefined, A)).toBe('10');
+    // Atributo que o modelo não usa não vale na fórmula.
+    expect(() => resolveFormula('{agi}', s, t, undefined, A)).toThrow(FormulaError);
   });
 
   it('atributo como quantidade de dados', () => {
     const t = tpl(2);
     const s = sheetOf(t, { agi: 3 });
-    expect(resolveFormula('{v}d20kh1', s, t, 'agi')).toBe('3d20kh1');
-    expect(resolveFormula(t.initiative!, s, t)).toBe('3d20kh1');
+    expect(resolveFormula('{v}d20kh1', s, t, 'agi', A)).toBe('3d20kh1');
+    expect(resolveFormula(t.initiative!, s, t, undefined, A)).toBe('3d20kh1');
   });
 
   it('referência inexistente dá erro claro', () => {
@@ -55,7 +57,7 @@ describe('fichas', () => {
   it('valida valores enviados pelo jogador', () => {
     const t = tpl(1);
     expect(
-      sanitizeValues(t, { for: 15, pv: { cur: 3, max: 12 }, classe: 'Ladino', hack: 1, atributos: 'x', des: 'muito', ca: Infinity }),
+      sanitizeValues(t, { for: 15, pv: { cur: 3, max: 12 }, classe: 'Ladino', hack: 1, atributos: 'x', des: 'muito', ca: Infinity, agi: 3 }, A),
     ).toEqual({ for: 15, pv: { cur: 3, max: 12 }, classe: 'Ladino' });
     expect(sanitizeValues(t, null)).toBeNull();
   });
@@ -150,5 +152,17 @@ describe('v0.8.0', () => {
     expect(playerOwnsItem('ana00000', tok('ana00000'))).toBe(true);
     expect(playerOwnsItem('ana00000', tok('bia00000'))).toBe(false);
     expect(playerOwnsItem('ana00000', { type: 'note', perm: { view: 'all', move: 'all', edit: 'all' } })).toBe(false);
+  });
+});
+
+describe('atributos da campanha', () => {
+  it('atributo novo, ainda sem valor, usa o padrão do modelo', async () => {
+    const { resolveFormula, TEMPLATE_PRESETS, DEFAULT_ATTRIBUTES } = await import('../src/sheets');
+    const t = { ...TEMPLATE_PRESETS[1], id: 't', perm: { view: 'all', move: 'gm', edit: 'gm' }, updatedAt: 0 } as const;
+    const tt = JSON.parse(JSON.stringify(t));
+    tt.fields.find((f: { type: string }) => f.type === 'attrs').attrs.push('sorte');
+    const attrs = [...DEFAULT_ATTRIBUTES, { id: 'sorte', label: 'Sorte' }];
+    const s = { id: 's', perm: tt.perm, updatedAt: 0, templateId: 't', name: 'X', kind: 'npc' as const, values: {} };
+    expect(resolveFormula('1d20+{mod}', s, tt, 'sorte', attrs)).toBe('1d20+0');
   });
 });

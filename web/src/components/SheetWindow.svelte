@@ -1,6 +1,6 @@
 <script lang="ts">
   import {
-    attrModifier, can, colorFor, isPlayerSheet, isResource, newRowId, numericValue,
+    attrModifier, attrValue, can, colorFor, isPlayerSheet, isResource, newRowId, numericValue, templateAttrs,
     type FieldValue, type ListRow, type ResourceValue, type TemplateField,
   } from '@ftt/shared';
   import type { TableSession } from '../lib/session/table.svelte';
@@ -94,11 +94,14 @@
     set(fid, listRows(fid).filter((r) => r.id !== rowId));
   }
 
-  const modText = (f: TemplateField) => {
+  const modText = (fid: string) => {
     if (!tpl || tpl.attrMod !== 'd20') return '';
-    const m = attrModifier(tpl, numericValue(sheet?.values[f.id]));
+    const m = attrModifier(tpl, attrValue(tpl, sheet?.values[fid]));
     return m >= 0 ? `+${m}` : String(m);
   };
+
+  /** Atributos da campanha que este modelo usa (definidos pelo mestre na aba Mesa). */
+  const campaignAttrs = $derived(tpl ? templateAttrs(tpl, session.settings.attributes ?? []) : []);
 </script>
 
 {#if sheet}
@@ -163,8 +166,23 @@
                 <span class="lbl">{f.label}</span>
               {/if}
               <LiveInput class="big" type="number" value={numericValue(sheet.values[f.id])} disabled={!editable} label={f.label} onCommit={(v) => set(f.id, Number(v))} />
-              {#if modText(f)}<span class="mod">{modText(f)}</span>{/if}
+              {#if modText(f.id)}<span class="mod">{modText(f.id)}</span>{/if}
             </div>
+          {:else if f.type === 'attrs'}
+            <h4 class="full">{f.label}</h4>
+            {#each campaignAttrs.filter((a) => a.block.id === f.id) as a (a.def.id)}
+              <div class="attr">
+                {#if f.roll}
+                  <button class="ghost lbl roll" title="Rolar {f.roll}" onclick={() => session.rollSheet(id, a.def.id, priv)}>🎲 {a.def.label}</button>
+                {:else}
+                  <span class="lbl">{a.def.label}</span>
+                {/if}
+                <LiveInput class="big" type="number" value={attrValue(tpl, sheet.values[a.def.id])} disabled={!editable} label={a.def.label} onCommit={(v) => set(a.def.id, Number(v))} />
+                {#if modText(a.def.id)}<span class="mod">{modText(a.def.id)}</span>{/if}
+              </div>
+            {:else}
+              <p class="muted small full">Nenhum atributo escolhido para este modelo.</p>
+            {/each}
           {:else if f.type === 'resource'}
             {@const r = res(f.id)}
             <div class="resource full">

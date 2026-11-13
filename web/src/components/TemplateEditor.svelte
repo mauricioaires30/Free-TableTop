@@ -85,6 +85,20 @@
     f.type = t;
     if (t === 'resource' && !f.max) f.max = 10;
     if (t === 'list' && f.showNote === undefined) f.showNote = true;
+    if (t === 'attrs') {
+      f.attrs = campaignAttrs.map((a) => a.id);
+      if (!f.roll) f.roll = draft?.attrMod === 'd20' ? '1d20+{mod}' : '1d20+{v}';
+      f.wide = true;
+    }
+    change();
+  }
+
+  /** Atributos que existem na campanha (aba Mesa). */
+  const campaignAttrs = $derived(gm.settings.attributes ?? []);
+
+  function toggleAttr(f: TemplateField, id: string, on: boolean) {
+    const current = f.attrs && f.attrs.length ? f.attrs : campaignAttrs.map((a) => a.id);
+    f.attrs = on ? [...new Set([...current, id])] : current.filter((x) => x !== id);
     change();
   }
 
@@ -200,7 +214,7 @@
                 </div>
                 <input class="flabel" bind:value={f.label} oninput={() => relabel(i)} aria-label="Rótulo" maxlength="40" />
                 <select value={f.type} onchange={(e) => setType(f, e.currentTarget.value as FieldType)} aria-label="Tipo">
-                  {#each Object.entries(FIELD_TYPE_LABELS) as [k, v] (k)}<option value={k}>{v}</option>{/each}
+                  {#each Object.entries(FIELD_TYPE_LABELS).filter(([k]) => k !== 'attr' || f.type === 'attr') as [k, v] (k)}<option value={k}>{v}</option>{/each}
                 </select>
                 {#if f.type !== 'section' && f.type !== 'check' && f.type !== 'list'}
                   <input class="froll" value={f.roll ?? ''} oninput={(e) => ((f.roll = e.currentTarget.value), change())} placeholder="rolagem (opcional)" aria-label="Fórmula de rolagem" />
@@ -215,6 +229,18 @@
                 <code title="Use nas fórmulas">&#123;{f.id}&#125;</code>
                 <button class="ghost tiny danger" onclick={() => removeField(i)} aria-label="Remover campo">✕</button>
               </div>
+              {#if f.type === 'attrs'}
+                <div class="list-cfg">
+                  <span class="muted">Usa:</span>
+                  {#each campaignAttrs as a (a.id)}
+                    <label>
+                      <input type="checkbox" checked={!f.attrs?.length || f.attrs.includes(a.id)} onchange={(e) => toggleAttr(f, a.id, e.currentTarget.checked)} />
+                      {a.label}
+                    </label>
+                  {/each}
+                  {#if !campaignAttrs.length}<span class="muted">Crie os atributos na aba Mesa.</span>{/if}
+                </div>
+              {/if}
               {#if f.type === 'list'}
                 <div class="list-cfg">
                   <span class="muted">Colunas:</span>

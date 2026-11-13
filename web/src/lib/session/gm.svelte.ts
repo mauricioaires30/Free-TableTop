@@ -5,12 +5,12 @@ import {
   FormulaError, itemForPlayer, logVisibleTo, newInvite, newItemId, parsePlayerIntent, PROTOCOL_VERSION,
   resolveFormula, rollDice, sanitizeValues, SHEET_PERM, sortEntries, stepTurn, TEMPLATE_PERM, TEMPLATE_PRESETS,
   TRANSFORM_FIELDS, WordFilter, DEFAULT_TABLES, TABLE_PERM, NOTE_PERM, rollTable as rollRandomTable, logToJournal,
-  MAX_NOTE_TEXT, AVATAR_SIDE, MAX_AVATAR_BYTES, playerOwnsItem,
+  MAX_NOTE_TEXT, AVATAR_SIDE, MAX_AVATAR_BYTES, playerOwnsItem, DEFAULT_ATTRIBUTES, templateAttrs,
   type Actor, type AnyDoc, type BoardItem, type Collection, type Combat, type CombatEntry, type DocMap,
   type EditPatch, type FieldValue, type FilterConfig, type GmMessage, type LogEntry, type Peer, type Perm,
   type PlayerIntent, type RelayToClient, type Roster, type Sheet, type SheetTemplate, type TableSettings,
   type JournalEntry, type WikiPage, type RandomTable, type FogShape, type GridSettings, type Layer, type MapSettings, type TransformPatch,
-  type ListRow,
+  type ListRow, type AttributeDef,
 } from '@ftt/shared';
 import { RelayClient } from '../net/client';
 import { fromBase64, GmImages, processImage } from '../images/images';
@@ -639,7 +639,7 @@ export class GmSession extends TableSession {
       templateId: t.id,
       name: o.name.trim() || 'Sem nome',
       kind: o.kind,
-      values: defaultValues($state.snapshot(t) as SheetTemplate),
+      values: defaultValues($state.snapshot(t) as SheetTemplate, this.attrs),
     };
     this.putDoc('sheets', sheet);
     return sheet;
@@ -685,7 +685,7 @@ export class GmSession extends TableSession {
     }
     const t = this.templateOf(sheet);
     if (!t) return;
-    const clean = sanitizeValues($state.snapshot(t) as SheetTemplate, values);
+    const clean = sanitizeValues($state.snapshot(t) as SheetTemplate, values, this.attrs);
     if (!clean) return;
     if (actor.role === 'player') {
       for (const [k, v] of Object.entries(clean)) {
@@ -711,10 +711,15 @@ export class GmSession extends TableSession {
     }
   }
 
+  /** Atributos que existem nesta campanha (definidos pelo mestre na aba Mesa). */
+  private get attrs(): AttributeDef[] {
+    return $state.snapshot(this.settings.attributes ?? DEFAULT_ATTRIBUTES) as AttributeDef[];
+  }
+
   private formula(actor: Actor, sheet: Sheet, formula: string, fieldId?: string): string | null {
     try {
       const t = $state.snapshot(this.templateOf(sheet)!) as SheetTemplate;
-      return resolveFormula(formula, $state.snapshot(sheet) as Sheet, t, fieldId);
+      return resolveFormula(formula, $state.snapshot(sheet) as Sheet, t, fieldId, this.attrs);
     } catch (e) {
       this.notify(actor, e instanceof FormulaError ? `Fórmula inválida: ${e.message}` : 'Fórmula inválida');
       return null;
@@ -724,8 +729,16 @@ export class GmSession extends TableSession {
   private doSheetRoll(actor: Actor, id: string, field: string, priv: boolean, rowId?: string) {
     const sheet = this.docs.sheets[id];
     if (!sheet || !can(actor, 'view', sheet)) return;
-    const f = this.templateOf(sheet)?.fields.find((x) => x.id === field);
-    if (!f) return;
+    const t = this.templateOf(sheet);
+    const f = t?.fields.find((x) => x.id === field);
+    if (!f) {
+      // Atributo da campanha: rola com a fórmula do bloco de atributos do modelo.
+      const a = t && templateAttrs($state.snapshot(t) as SheetTemplate, this.attrs).find((x) => x.def.id === field);
+      if (!a?.block.roll) return;
+      const expr = this.formula(actor, sheet, a.block.roll, a.def.id);
+      if (expr) this.doRoll(actor, expr, priv, `${sheet.name}: ${a.def.label}`);
+      return;
+    }
     if (rowId) {
       // Rolagem de uma linha da lista (item, poder...), não do campo inteiro.
       if (f.type !== 'list') return;

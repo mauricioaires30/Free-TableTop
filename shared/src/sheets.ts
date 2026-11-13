@@ -1,7 +1,27 @@
 // Modelos de ficha (o mestre define o sistema) e fichas de personagem.
 import type { Perm } from './permissions';
 
-export type FieldType = 'section' | 'text' | 'number' | 'attr' | 'resource' | 'textarea' | 'check' | 'list';
+export type FieldType = 'section' | 'text' | 'number' | 'attr' | 'attrs' | 'resource' | 'textarea' | 'check' | 'list';
+
+/** Atributo da campanha: o mestre define a lista uma vez e os modelos escolhem quais usar. */
+export interface AttributeDef {
+  id: string;
+  label: string;
+}
+
+/** Lista inicial (cobre os modelos prontos). O mestre edita na aba Mesa. */
+export const DEFAULT_ATTRIBUTES: AttributeDef[] = [
+  { id: 'for', label: 'Força' },
+  { id: 'des', label: 'Destreza' },
+  { id: 'con', label: 'Constituição' },
+  { id: 'int', label: 'Inteligência' },
+  { id: 'sab', label: 'Sabedoria' },
+  { id: 'car', label: 'Carisma' },
+  { id: 'agi', label: 'Agilidade' },
+  { id: 'itl', label: 'Intelecto' },
+  { id: 'pre', label: 'Presença' },
+  { id: 'vig', label: 'Vigor' },
+];
 
 /** Uma linha de um campo "list": item do inventário, equipamento ou poder/magia. */
 export interface ListRow {
@@ -32,6 +52,8 @@ export interface TemplateField {
   showEquipped?: boolean;
   showNote?: boolean;
   showRoll?: boolean;
+  /** attrs: quais atributos da campanha este modelo usa (vazio/ausente = todos). */
+  attrs?: string[];
 }
 
 export interface SheetTemplate {
@@ -87,6 +109,7 @@ export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   textarea: 'Texto longo',
   check: 'Marcador',
   list: 'Lista (inventário, equipamento, poderes...)',
+  attrs: 'Atributos da campanha',
 };
 
 export const FIELD_ID_RE = /^[a-z][a-z0-9_]{0,23}$/;
@@ -123,6 +146,11 @@ export function numericValue(v: FieldValue | undefined): number {
   return 0;
 }
 
+/** Valor de um atributo; se ainda não foi preenchido (atributo novo na campanha), usa o padrão do modelo. */
+export function attrValue(t: Pick<SheetTemplate, 'attrMod'>, v: FieldValue | undefined): number {
+  return v === undefined ? (t.attrMod === 'd20' ? 10 : 1) : numericValue(v);
+}
+
 export function attrModifier(t: Pick<SheetTemplate, 'attrMod'>, value: number): number {
   return t.attrMod === 'd20' ? Math.floor((value - 10) / 2) : value;
 }
@@ -156,11 +184,28 @@ export function newRowId(): string {
 
 export const MAX_LIST_ROWS = 80;
 
-export function defaultValues(t: SheetTemplate): Record<string, FieldValue> {
+export function defaultValues(t: SheetTemplate, attrs: AttributeDef[] = []): Record<string, FieldValue> {
   const out: Record<string, FieldValue> = {};
   for (const f of t.fields) {
     const v = defaultValue(f, t);
     if (v !== undefined) out[f.id] = v;
+  }
+  for (const { def } of templateAttrs(t, attrs)) out[def.id] = t.attrMod === 'd20' ? 10 : 1;
+  return out;
+}
+
+/** Atributos da campanha que aparecem neste modelo, com o bloco que define a rolagem deles. */
+export function templateAttrs(t: SheetTemplate, attrs: AttributeDef[]): Array<{ def: AttributeDef; block: TemplateField }> {
+  const out: Array<{ def: AttributeDef; block: TemplateField }> = [];
+  const seen = new Set<string>();
+  for (const f of t.fields) {
+    if (f.type !== 'attrs') continue;
+    for (const def of attrs) {
+      if (seen.has(def.id)) continue;
+      if (f.attrs && f.attrs.length && !f.attrs.includes(def.id)) continue;
+      seen.add(def.id);
+      out.push({ def, block: f });
+    }
   }
   return out;
 }
@@ -171,8 +216,15 @@ export class FormulaError extends Error {}
  * Troca as referências de uma fórmula pelos valores da ficha.
  * {v} e {mod} = campo clicado; {id}, {id.mod}, {id.max} = qualquer campo.
  */
-export function resolveFormula(formula: string, sheet: Sheet, t: SheetTemplate, fieldId?: string): string {
-  const fieldById = new Map(t.fields.map((f) => [f.id, f]));
+export function resolveFormula(
+  formula: string,
+  sheet: Sheet,
+  t: SheetTemplate,
+  fieldId?: string,
+  attrs: AttributeDef[] = [],
+): string {
+  const fieldById = new Map<string, Pick<TemplateField, 'id' | 'type'>>(t.fields.map((f) => [f.id, f]));
+  for (const { def } of templateAttrs(t, attrs)) if (!fieldById.has(def.id)) fieldById.set(def.id, { id: def.id, type: 'attr' });
   const out = formula.replace(/\{([a-z0-9_]+)(?:\.(mod|max))?\}/gi, (_m, ref: string, suffix?: string) => {
     let id = ref.toLowerCase();
     let suf = suffix?.toLowerCase();
@@ -184,10 +236,11 @@ export function resolveFormula(formula: string, sheet: Sheet, t: SheetTemplate, 
     const f = fieldById.get(id);
     if (!f) throw new FormulaError(`Campo {${ref}} não existe neste modelo`);
     const v = sheet.values[id];
+    const base = f.type === 'attr' ? attrValue(t, v) : numericValue(v);
     let n: number;
-    if (suf === 'max') n = isResource(v) ? v.max : numericValue(v);
-    else if (suf === 'mod') n = attrModifier(t, numericValue(v));
-    else n = numericValue(v);
+    if (suf === 'max') n = isResource(v) ? v.max : base;
+    else if (suf === 'mod') n = attrModifier(t, base);
+    else n = base;
     return String(Math.trunc(n));
   });
   // "1d20+-2" → "1d20-2", "1d20--2" → "1d20+2"
@@ -195,13 +248,14 @@ export function resolveFormula(formula: string, sheet: Sheet, t: SheetTemplate, 
 }
 
 /** Valida o que um jogador quer gravar na ficha: só campos do modelo, com o tipo certo. */
-export function sanitizeValues(t: SheetTemplate, raw: unknown): Record<string, FieldValue> | null {
+export function sanitizeValues(t: SheetTemplate, raw: unknown, attrs: AttributeDef[] = []): Record<string, FieldValue> | null {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null;
   const out: Record<string, FieldValue> = {};
-  const fields = new Map(t.fields.map((f) => [f.id, f]));
+  const fields = new Map<string, Pick<TemplateField, 'id' | 'type'>>(t.fields.map((f) => [f.id, f]));
+  for (const { def } of templateAttrs(t, attrs)) if (!fields.has(def.id)) fields.set(def.id, { id: def.id, type: 'attr' });
   for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
     const f = fields.get(k);
-    if (!f || f.type === 'section') continue;
+    if (!f || f.type === 'section' || f.type === 'attrs') continue;
     const num = (x: unknown) => typeof x === 'number' && Number.isFinite(x) && Math.abs(x) < 1e6;
     switch (f.type) {
       case 'text':
@@ -271,7 +325,7 @@ export function hpOf(sheet: Sheet, t: SheetTemplate | undefined): ResourceValue 
 
 type Preset = Omit<SheetTemplate, 'id' | 'perm' | 'updatedAt'>;
 
-const attr = (id: string, label: string, roll: string): TemplateField => ({ id, label, type: 'attr', roll });
+const attrs = (roll: string, ids: string[]): TemplateField => ({ id: 'atributos', label: 'Atributos', type: 'attrs', roll, attrs: ids, wide: true });
 const res = (id: string, label: string, max: number, color: string): TemplateField => ({ id, label, type: 'resource', max, color });
 const section = (id: string, label: string): TemplateField => ({ id, label, type: 'section' });
 const long = (id: string, label: string): TemplateField => ({ id, label, type: 'textarea', wide: true });
@@ -308,13 +362,7 @@ export const TEMPLATE_PRESETS: Preset[] = [
       { id: 'nivel', label: 'Nível', type: 'number' },
       { id: 'ca', label: 'Defesa (CA)', type: 'number' },
       res('pv', 'Pontos de vida', 10, '#c0392b'),
-      section('atributos', 'Atributos'),
-      attr('for', 'Força', '1d20+{mod}'),
-      attr('des', 'Destreza', '1d20+{mod}'),
-      attr('con', 'Constituição', '1d20+{mod}'),
-      attr('int', 'Inteligência', '1d20+{mod}'),
-      attr('sab', 'Sabedoria', '1d20+{mod}'),
-      attr('car', 'Carisma', '1d20+{mod}'),
+      attrs('1d20+{mod}', ['for', 'des', 'con', 'int', 'sab', 'car']),
       section('detalhes', 'Detalhes'),
       long('pericias', 'Perícias e proficiências'),
       list('magias', 'Magias e habilidades', { showRoll: true }),
@@ -331,12 +379,7 @@ export const TEMPLATE_PRESETS: Preset[] = [
       { id: 'classe', label: 'Classe', type: 'text' },
       { id: 'exposicao', label: 'Exposição (%)', type: 'number' },
       { id: 'defesa', label: 'Defesa', type: 'number' },
-      section('atributos', 'Atributos'),
-      attr('agi', 'Agilidade', '{v}d20kh1'),
-      attr('for', 'Força', '{v}d20kh1'),
-      attr('int', 'Intelecto', '{v}d20kh1'),
-      attr('pre', 'Presença', '{v}d20kh1'),
-      attr('vig', 'Vigor', '{v}d20kh1'),
+      attrs('{v}d20kh1', ['agi', 'for', 'itl', 'pre', 'vig']),
       section('status', 'Status'),
       res('pv', 'Vida', 20, '#c0392b'),
       res('san', 'Sanidade', 12, '#8e44ad'),
