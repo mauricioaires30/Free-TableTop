@@ -1,5 +1,6 @@
 // Modelos de ficha (o mestre define o sistema) e fichas de personagem.
 import type { Perm } from './permissions';
+import { calc } from './calc';
 
 export type FieldType = 'section' | 'text' | 'number' | 'attr' | 'attrs' | 'resource' | 'textarea' | 'check' | 'list';
 
@@ -61,8 +62,12 @@ export interface SheetTemplate {
   perm: Perm;
   updatedAt: number;
   name: string;
-  /** Como calcular o modificador de atributos: nenhum ou estilo d20 (valor-10)/2. */
-  attrMod: 'none' | 'd20';
+  /** Modificador de atributo: nenhum (usa o valor), estilo d20 (valor-10)/2 ou uma conta própria. */
+  attrMod: 'none' | 'd20' | 'custom';
+  /** Conta própria do modificador, com v = valor do atributo. Ex.: "floor(v/2)", "v*5". */
+  attrModFormula?: string;
+  /** Valor inicial dos atributos (padrão: 10 no estilo d20, 1 nos outros). */
+  attrDefault?: number;
   fields: TemplateField[];
   /** Fórmula de iniciativa, ex.: "1d20+{des.mod}". */
   initiative?: string;
@@ -147,15 +152,28 @@ export function numericValue(v: FieldValue | undefined): number {
 }
 
 /** Valor de um atributo; se ainda não foi preenchido (atributo novo na campanha), usa o padrão do modelo. */
-export function attrValue(t: Pick<SheetTemplate, 'attrMod'>, v: FieldValue | undefined): number {
-  return v === undefined ? (t.attrMod === 'd20' ? 10 : 1) : numericValue(v);
+export function attrValue(t: Pick<SheetTemplate, 'attrMod' | 'attrDefault'>, v: FieldValue | undefined): number {
+  return v === undefined ? attrStart(t) : numericValue(v);
 }
 
-export function attrModifier(t: Pick<SheetTemplate, 'attrMod'>, value: number): number {
-  return t.attrMod === 'd20' ? Math.floor((value - 10) / 2) : value;
+/** Valor com que um atributo começa numa ficha nova. */
+export function attrStart(t: Pick<SheetTemplate, 'attrMod' | 'attrDefault'>): number {
+  return t.attrDefault ?? (t.attrMod === 'd20' ? 10 : 1);
 }
 
-export function defaultValue(f: TemplateField, t?: Pick<SheetTemplate, 'attrMod'>): FieldValue | undefined {
+export function attrModifier(t: Pick<SheetTemplate, 'attrMod' | 'attrModFormula'>, value: number): number {
+  if (t.attrMod === 'd20') return Math.floor((value - 10) / 2);
+  if (t.attrMod === 'custom' && t.attrModFormula?.trim()) {
+    try {
+      return Math.trunc(calc(t.attrModFormula, { v: value }));
+    } catch {
+      return value;
+    }
+  }
+  return value;
+}
+
+export function defaultValue(f: TemplateField, t?: Pick<SheetTemplate, 'attrMod' | 'attrDefault'>): FieldValue | undefined {
   switch (f.type) {
     case 'section':
       return undefined;
@@ -165,7 +183,7 @@ export function defaultValue(f: TemplateField, t?: Pick<SheetTemplate, 'attrMod'
     case 'number':
       return 0;
     case 'attr':
-      return t?.attrMod === 'd20' ? 10 : 1;
+      return t ? attrStart(t) : 1;
     case 'resource':
       return { cur: f.max ?? 10, max: f.max ?? 10 };
     case 'check':
@@ -190,7 +208,7 @@ export function defaultValues(t: SheetTemplate, attrs: AttributeDef[] = []): Rec
     const v = defaultValue(f, t);
     if (v !== undefined) out[f.id] = v;
   }
-  for (const { def } of templateAttrs(t, attrs)) out[def.id] = t.attrMod === 'd20' ? 10 : 1;
+  for (const { def } of templateAttrs(t, attrs)) out[def.id] = attrStart(t);
   return out;
 }
 
@@ -325,7 +343,7 @@ export function hpOf(sheet: Sheet, t: SheetTemplate | undefined): ResourceValue 
 
 type Preset = Omit<SheetTemplate, 'id' | 'perm' | 'updatedAt'>;
 
-const attrs = (roll: string, ids: string[]): TemplateField => ({ id: 'atributos', label: 'Atributos', type: 'attrs', roll, attrs: ids, wide: true });
+const attrs = (roll: string, ids: string[], label = 'Atributos'): TemplateField => ({ id: 'atributos', label, type: 'attrs', roll, attrs: ids, wide: true });
 const res = (id: string, label: string, max: number, color: string): TemplateField => ({ id, label, type: 'resource', max, color });
 const section = (id: string, label: string): TemplateField => ({ id, label, type: 'section' });
 const long = (id: string, label: string): TemplateField => ({ id, label, type: 'textarea', wide: true });
@@ -387,6 +405,57 @@ export const TEMPLATE_PRESETS: Preset[] = [
       long('pericias', 'Perícias'),
       list('rituais', 'Rituais e poderes', { showRoll: true }),
       list('inventario', 'Inventário', { showQty: true, showEquipped: true }),
+    ],
+  },
+  {
+    // Parada de d10 contando sucessos (8 ou mais), estilo horror pessoal / urbano.
+    name: 'Parada de dados (sucessos)',
+    attrMod: 'none',
+    attrDefault: 2,
+    initiative: '1d10+{des}',
+    hpField: 'vida',
+    fields: [
+      { id: 'conceito', label: 'Conceito', type: 'text', wide: true },
+      attrs('{v}d10>=8', ['for', 'des', 'vig', 'int', 'pre']),
+      res('vida', 'Vitalidade', 7, '#c0392b'),
+      res('vontade', 'Força de vontade', 5, '#2e86de'),
+      list('pericias', 'Perícias', { showRoll: true }),
+      list('inventario', 'Inventário', { showQty: true }),
+      long('notas', 'Anotações'),
+    ],
+  },
+  {
+    // Rolar abaixo do valor no d100, estilo investigação clássica.
+    name: 'Percentual (rolar abaixo)',
+    attrMod: 'none',
+    attrDefault: 50,
+    initiative: '{des}',
+    hpField: 'pv',
+    fields: [
+      { id: 'ocupacao', label: 'Ocupação', type: 'text', wide: true },
+      attrs('1d100<={v}', ['for', 'des', 'con', 'int', 'pre']),
+      res('pv', 'Pontos de vida', 10, '#c0392b'),
+      res('san', 'Sanidade', 50, '#8e44ad'),
+      list('pericias', 'Perícias', { showRoll: true }),
+      list('inventario', 'Inventário', { showQty: true }),
+      long('notas', 'Anotações'),
+    ],
+  },
+  {
+    // Narrativo com dados Fate: aspectos, façanhas e estresse.
+    name: 'Narrativo (dados Fate)',
+    attrMod: 'none',
+    attrDefault: 0,
+    initiative: '4dF+{agi}',
+    hpField: 'estresse',
+    fields: [
+      { id: 'conceito', label: 'Conceito', type: 'text', wide: true },
+      { id: 'dificuldade', label: 'Dificuldade', type: 'text', wide: true },
+      attrs('4dF+{v}', ['agi', 'for', 'itl', 'pre', 'vig'], 'Perícias'),
+      list('aspectos', 'Aspectos'),
+      list('facanhas', 'Façanhas'),
+      res('estresse', 'Estresse', 3, '#c0392b'),
+      list('consequencias', 'Consequências'),
     ],
   },
   {

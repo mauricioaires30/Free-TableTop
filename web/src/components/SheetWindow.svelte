@@ -95,7 +95,7 @@
   }
 
   const modText = (fid: string) => {
-    if (!tpl || tpl.attrMod !== 'd20') return '';
+    if (!tpl || tpl.attrMod === 'none') return '';
     const m = attrModifier(tpl, attrValue(tpl, sheet?.values[fid]));
     return m >= 0 ? `+${m}` : String(m);
   };

@@ -1,6 +1,6 @@
 <script lang="ts">
   import {
-    FIELD_TYPE_LABELS, fieldIdFromLabel, TEMPLATE_PRESETS,
+    calc, FIELD_TYPE_LABELS, fieldIdFromLabel, TEMPLATE_PRESETS,
     type FieldType, type SheetTemplate, type TemplateField,
   } from '@ftt/shared';
   import type { GmSession } from '../lib/session/gm.svelte';
@@ -92,6 +92,17 @@
     }
     change();
   }
+
+  /** Erro da conta própria do modificador (testada com v = 10). */
+  const modError = $derived.by(() => {
+    if (draft?.attrMod !== 'custom' || !draft.attrModFormula?.trim()) return '';
+    try {
+      calc(draft.attrModFormula, { v: 10 });
+      return '';
+    } catch (e) {
+      return (e as Error).message;
+    }
+  });
 
   /** Atributos que existem na campanha (aba Mesa). */
   const campaignAttrs = $derived(gm.settings.attributes ?? []);
@@ -189,7 +200,35 @@
               <select id="tm" bind:value={draft.attrMod} onchange={change}>
                 <option value="none">Nenhum (usa o valor)</option>
                 <option value="d20">Estilo d20: (valor − 10) ÷ 2</option>
+                <option value="custom">Conta própria…</option>
               </select>
+            </div>
+            {#if draft.attrMod === 'custom'}
+              <div>
+                <label for="tmf">Conta do modificador (v = valor)</label>
+                <input
+                  id="tmf"
+                  value={draft.attrModFormula ?? ''}
+                  oninput={(e) => ((draft!.attrModFormula = e.currentTarget.value), change())}
+                  placeholder="ex.: floor(v/2), v*5, v-3"
+                  class:bad={!!modError}
+                />
+                {#if modError}<span class="err">{modError}</span>{/if}
+              </div>
+            {/if}
+            <div>
+              <label for="tad">Valor inicial dos atributos</label>
+              <input
+                id="tad"
+                type="number"
+                value={draft.attrDefault ?? ''}
+                placeholder={draft.attrMod === 'd20' ? '10' : '1'}
+                oninput={(e) => {
+                  const v = e.currentTarget.value.trim();
+                  draft!.attrDefault = v === '' ? undefined : Number(v);
+                  change();
+                }}
+              />
             </div>
             <div>
               <label for="ti">Fórmula de iniciativa</label>
@@ -259,6 +298,7 @@
             <ul class="muted">
               <li><code>&#123;v&#125;</code> valor do campo clicado · <code>&#123;mod&#125;</code> modificador dele</li>
               <li><code>&#123;for&#125;</code>, <code>&#123;for.mod&#125;</code>, <code>&#123;pv.max&#125;</code> qualquer campo pelo código</li>
+              <li>Sucessos: <code>&#123;v&#125;d10&gt;=8</code> conta dados com 8+ · rolar abaixo: <code>1d100&lt;=&#123;v&#125;</code> · Fate: <code>4dF+&#123;v&#125;</code> · rerrolar 1: <code>2d6r1</code></li>
               <li>Exemplos: <code>1d20+&#123;mod&#125;</code> · <code>&#123;v&#125;d20kh1</code> (rola tantos d20 quanto o atributo e fica com o maior) · <code>2d6+&#123;for.mod&#125;</code></li>
             </ul>
           </details>
@@ -369,6 +409,13 @@
     font-size: 11px;
     color: var(--accent-2);
     white-space: nowrap;
+  }
+  .bad {
+    border-color: var(--danger);
+  }
+  .err {
+    font-size: 11px;
+    color: var(--danger);
   }
   .help {
     margin-top: 14px;
