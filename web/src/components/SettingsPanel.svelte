@@ -2,6 +2,8 @@
   import { DEFAULT_BAD_WORDS, type GridSettings } from '@ftt/shared';
   import type { GmSession } from '../lib/session/gm.svelte';
   import InviteBox from './InviteBox.svelte';
+  import { download, exportZip, safeFileName } from '../lib/storage/backup';
+  import { todayKey } from '../lib/storage/campaign';
 
   let { gm }: { gm: GmSession } = $props();
 
@@ -19,6 +21,21 @@
 
   function restore() {
     words = DEFAULT_BAD_WORDS.join('\n');
+  }
+
+  let exporting = $state(false);
+
+  async function backup() {
+    exporting = true;
+    try {
+      await gm.flush();
+      const zip = await exportZip(gm.store);
+      download(zip, `${safeFileName(gm.campaignName)}-${todayKey()}.zip`);
+    } catch (e) {
+      gm.toast(`Não consegui gerar o backup: ${(e as Error).message}`, 'error');
+    } finally {
+      exporting = false;
+    }
   }
 
   function grid(patch: Partial<GridSettings>) {
@@ -85,6 +102,12 @@
     <p class="muted small">
       Salvo em: <strong>{gm.store.kind === 'fs' ? `📁 ${gm.store.label}` : '🌐 este navegador'}</strong>
       {#if gm.store.kind === 'fs'}<br />Não compartilhe o arquivo campanha.json: ele tem a chave de mestre da sala.{/if}
+    </p>
+    <button onclick={backup} disabled={exporting}>{exporting ? 'Gerando…' : '⬇ Baixar backup (.zip)'}</button>
+    <p class="muted small">
+      {gm.store.kind === 'idb'
+        ? 'Sua campanha está só neste navegador. Baixe backups de vez em quando: limpar os dados do navegador apaga a campanha.'
+        : 'O backup serve para levar a campanha para outro PC (abra em "Importar backup" na tela inicial).'}
     </p>
   </section>
 

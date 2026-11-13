@@ -4,6 +4,7 @@
     type FieldType, type SheetTemplate, type TemplateField,
   } from '@ftt/shared';
   import type { GmSession } from '../lib/session/gm.svelte';
+  import { download, safeFileName, templateFromJson, templateToJson } from '../lib/storage/backup';
 
   let { gm, onClose }: { gm: GmSession; onClose: () => void } = $props();
 
@@ -109,6 +110,28 @@
     }
   }
 
+  let importInput: HTMLInputElement;
+
+  function exportTemplate() {
+    if (!draft) return;
+    download(new Blob([templateToJson(draft)], { type: 'application/json' }), `modelo-${safeFileName(draft.name)}.json`);
+  }
+
+  async function importTemplate() {
+    const f = importInput.files?.[0];
+    importInput.value = '';
+    if (!f) return;
+    try {
+      if (f.size > 1_000_000) throw new Error('Arquivo grande demais.');
+      const t = gm.createTemplate(templateFromJson(await f.text()));
+      dirty = false;
+      pick(t.id);
+      gm.toast(`Modelo "${t.name}" importado.`);
+    } catch (e) {
+      gm.toast(e instanceof SyntaxError ? 'Arquivo inválido.' : (e as Error).message, 'error');
+    }
+  }
+
   function close() {
     if (dirty && !confirm('Fechar sem salvar as mudanças?')) return;
     onClose();
@@ -135,6 +158,8 @@
           {#each TEMPLATE_PRESETS as p, i (p.name)}<option value={i}>{p.name}</option>{/each}
         </select>
         <button class="wide-btn" onclick={createFromPreset}>+ Criar modelo</button>
+        <button class="wide-btn" onclick={() => importInput.click()}>Importar de arquivo…</button>
+        <input type="file" accept=".json,application/json" hidden bind:this={importInput} onchange={importTemplate} />
       </aside>
 
       {#if draft}
@@ -204,6 +229,7 @@
 
           <div class="actions">
             <button class="ghost danger" onclick={remove}>Apagar modelo</button>
+            <button class="ghost" onclick={exportTemplate} title="Baixa o modelo para mandar a outro mestre">Exportar</button>
             <span class="spacer"></span>
             <button class="primary" onclick={save} disabled={!dirty}>{dirty ? 'Salvar modelo' : 'Salvo'}</button>
           </div>

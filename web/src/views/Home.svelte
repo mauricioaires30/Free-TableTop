@@ -3,6 +3,7 @@
   import { active, go, parseInviteLink } from '../lib/router.svelte';
   import { GmSession } from '../lib/session/gm.svelte';
   import { newCampaign, PATHS } from '../lib/storage/campaign';
+  import { campaignNameFromZip, readZip, roomIdFromZip, writeFiles } from '../lib/storage/backup';
   import {
     ensurePermission, forgetCampaign, FsStore, hasFolderAccess, IdbStore, listRecent, rememberCampaign,
     type CampaignStore, type RecentCampaign,
@@ -87,6 +88,30 @@
     recent = await listRecent();
   }
 
+  let zipInput: HTMLInputElement;
+
+  const importZip = () =>
+    run(async () => {
+      const file = zipInput.files?.[0];
+      zipInput.value = '';
+      if (!file) return;
+      const files = await readZip(file);
+      const cname = campaignNameFromZip(files);
+      const roomId = roomIdFromZip(files);
+      if (recent.some((r) => r.roomId === roomId) && !confirm(`"${cname}" já está na sua lista. Importar por cima?`)) return;
+      if (folderOk) {
+        const parent = await window.showDirectoryPicker!({ id: 'ftt-campanhas', mode: 'readwrite' });
+        const dir = await parent.getDirectoryHandle(folderName(cname), { create: true });
+        const store = new FsStore(dir);
+        if ((await store.readText(PATHS.campaign)) && !confirm(`A pasta "${dir.name}" já tem uma campanha. Substituir pelos arquivos do backup?`)) return;
+        await writeFiles(store, files);
+        return openStore(store, dir);
+      }
+      const store = new IdbStore(roomId);
+      await writeFiles(store, files);
+      await openStore(store);
+    });
+
   function join() {
     const p = parseInviteLink(link);
     if (!p) {
@@ -146,9 +171,13 @@
       {:else}
         <p class="muted">Nenhuma campanha recente neste navegador.</p>
       {/if}
-      {#if folderOk}
-        <button class="wide" disabled={busy} onclick={openFolder}>Escolher pasta da campanha…</button>
-      {/if}
+      <div class="stack">
+        {#if folderOk}
+          <button class="wide" disabled={busy} onclick={openFolder}>Escolher pasta da campanha…</button>
+        {/if}
+        <button class="wide ghost-border" disabled={busy} onclick={() => zipInput.click()}>Importar backup (.zip)…</button>
+      </div>
+      <input type="file" accept=".zip,application/zip" hidden bind:this={zipInput} onchange={importZip} />
     </section>
 
     <section class="card">
@@ -215,6 +244,18 @@
     width: 100%;
     margin-top: auto;
     padding: 10px;
+  }
+  .stack {
+    margin-top: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .stack .wide {
+    margin-top: 0;
+  }
+  .ghost-border {
+    background: transparent;
   }
   .card label + input {
     margin-bottom: 14px;

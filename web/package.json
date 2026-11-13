@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@ftt/shared": "*",
+    "fflate": "^0.8.3",
     "idb-keyval": "^6.3.0",
     "konva": "^10.9.1",
     "qrcode": "^1.5.4"
