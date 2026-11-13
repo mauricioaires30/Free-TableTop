@@ -13,12 +13,14 @@ A free virtual tabletop for RPGs that runs in the browser. Campaigns are saved i
 - **Live cursors:** everyone sees where the players are pointing. The GM's cursor stays hidden.
 - **Permissions on everything:** choose who can **see**, **move** and **edit** each item, sheet or page: everyone, only the GM, the owner, or specific players. Hidden things never reach the players' browsers.
 - **Sheets for any system:** the GM builds the sheet template (attributes, resource bars, text, rolls) or starts from a generic, d20 fantasy or paranormal investigation preset. Each player sees only their own sheet, and the GM can share any sheet. Templates can be exported and imported to trade with other GMs.
+- **Character portraits:** each player uploads their character's image, shown on the sheet and the token.
+- **Who changes what:** players handle their own sheets and health; the GM handles NPCs and everything else, and can unlock a player's sheet to fix something.
 - **Rolls from the sheet:** click an attribute to roll its formula, like `1d20+{mod}` or `{v}d20kh1`.
 - **NPCs and monsters:** hidden sheets only the GM sees, with secret initiative.
 - **Combat:** initiative order, rounds and turns, hidden creatures, and damage or healing right on the health bar.
-- **Map:** square or hex grid with snapping, layers (map, objects, tokens), locked backgrounds, tokens linked to sheets with health and conditions, fog of war (rectangle and brush), shared ruler with distances, and pings.
-- **Dice:** `2d6+3`, `4d6kh3`, `2d20kl1`, exploding `1d6!`, `d%`, advantage and disadvantage. Rolls can be public, private to the GM, or hidden.
-- **Chat:** `/r` to roll, `/gr` for a private roll, `/w name` to whisper.
+- **Map:** square or hex grid with snapping, layers (map, objects, tokens), locked backgrounds, tokens linked to sheets with health and conditions, fog of war (rectangle and brush), shared ruler with distances, and pings. Rotate the selected item with the mouse wheel.
+- **Dice tray:** a tray on the board to build rolls by clicking dice, with modifier, advantage, and its own roll history. `2d6+3`, `4d6kh3`, `2d20kl1`, exploding `1d6!`, `d%`. Rolls can be public, private to the GM, or hidden.
+- **Chat just for talking:** messages and `/w name` whispers; rolls stay in the dice tray.
 - **GM tools:** session journal (with a draft from the day's chat), campaign wiki with `[[page]]` links, random tables with weights and nested tables, ready-made generators (names, taverns, weather, encounters, treasure, hooks) and progress clocks on the board.
 - **Word filter:** blocks or censors offensive words in Portuguese, including accents, `p0rr4`, `p.o.r.r.a` and repeated letters. The GM edits the list.
 - **Moderation:** mute, kick, and generate a new invite.

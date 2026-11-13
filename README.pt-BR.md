@@ -13,12 +13,14 @@ Mesa virtual de RPG grátis que roda no navegador. A campanha fica salva numa pa
 - **Cursores ao vivo:** todo mundo vê para onde os jogadores estão apontando. O cursor do mestre fica escondido.
 - **Permissões em tudo:** escolha quem pode **ver**, **mover** e **editar** cada item, ficha ou página: todos, só o mestre, o dono ou jogadores específicos. O que está oculto nunca chega ao navegador dos jogadores.
 - **Fichas para qualquer sistema:** o mestre monta o modelo de ficha (atributos, barras, textos, rolagens) ou parte de um pronto: genérico, fantasia d20 ou investigação paranormal. Cada jogador vê só a própria ficha, e o mestre pode liberar qualquer ficha. Modelos podem ser exportados e importados para trocar com outros mestres.
+- **Imagem do personagem:** cada jogador envia a imagem do seu personagem, que aparece na ficha e no token.
+- **Quem mexe em quê:** jogadores cuidam da própria ficha e vida; o mestre cuida dos NPCs e do resto, e pode destravar a ficha de um jogador para corrigir algo.
 - **Rolagens pela ficha:** clique num atributo para rolar a fórmula dele, como `1d20+{mod}` ou `{v}d20kh1`.
 - **NPCs e monstros:** fichas ocultas que só o mestre vê, com iniciativa secreta.
 - **Combate:** ordem de iniciativa, rodadas e turnos, criaturas ocultas e dano ou cura direto na barra de vida.
-- **Mapa:** grid quadrado ou hexagonal com encaixe, camadas (mapa, objetos, tokens), fundo travado, tokens ligados às fichas com vida e condições, névoa de guerra (retângulo e pincel), régua compartilhada com distância e pings.
-- **Dados:** `2d6+3`, `4d6kh3`, `2d20kl1`, `1d6!` explosivo, `d%`, vantagem e desvantagem. A rolagem pode ser pública, só para o mestre ou oculta.
-- **Chat:** `/r` para rolar, `/gr` para rolagem privada, `/w nome` para sussurrar.
+- **Mapa:** grid quadrado ou hexagonal com encaixe, camadas (mapa, objetos, tokens), fundo travado, tokens ligados às fichas com vida e condições, névoa de guerra (retângulo e pincel), régua compartilhada com distância e pings. Gire o item selecionado com a roda do mouse.
+- **Bandeja de dados:** fica sobre o quadro; você monta a rolagem clicando nos dados, com modificador, vantagem e histórico próprio. `2d6+3`, `4d6kh3`, `2d20kl1`, `1d6!` explosivo, `d%`. A rolagem pode ser pública, só para o mestre ou oculta.
+- **Chat só para conversa:** mensagens e sussurros com `/w nome`; as rolagens ficam na bandeja.
 - **Ferramentas do mestre:** diário de sessões (com rascunho a partir do chat do dia), wiki da campanha com links `[[página]]`, tabelas aleatórias com pesos e tabelas aninhadas, geradores prontos (nomes, tavernas, clima, encontros, tesouros, ganchos) e relógios de progresso no quadro.
 - **Filtro de palavras:** bloqueia ou censura palavrões, pegando acentos, `p0rr4`, `p.o.r.r.a` e letras repetidas. O mestre edita a lista.
 - **Moderação:** silenciar, expulsar e gerar um novo convite.
