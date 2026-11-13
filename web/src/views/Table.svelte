@@ -15,6 +15,7 @@
   import SheetsPanel from '../components/SheetsPanel.svelte';
   import SheetWindow from '../components/SheetWindow.svelte';
   import TemplateEditor from '../components/TemplateEditor.svelte';
+  import CombatPanel from '../components/CombatPanel.svelte';
 
   let { session, gm = null, onLeave }: { session: TableSession; gm?: GmSession | null; onLeave?: () => void } = $props();
 
@@ -22,7 +23,7 @@
   if (import.meta.env.DEV) (window as unknown as { __ftt: unknown }).__ftt = session;
 
   let renderer = $state<BoardRenderer | null>(null);
-  type Tab = 'chat' | 'sheets' | 'players' | 'settings';
+  type Tab = 'chat' | 'sheets' | 'combat' | 'players' | 'settings';
   let tab = $state<Tab>('chat');
   let showTemplates = $state(false);
   let permSheet = $state<string | null>(null);
@@ -198,14 +199,19 @@
         <nav class="tabs">
           <button class:on={tab === 'chat'} onclick={() => (tab = 'chat')}>Chat</button>
           <button class:on={tab === 'sheets'} onclick={() => (tab = 'sheets')}>Fichas</button>
-          <button class:on={tab === 'players'} onclick={() => (tab = 'players')}>Jogadores ({onlineCount})</button>
-          {#if gm}<button class:on={tab === 'settings'} onclick={() => (tab = 'settings')}>Mesa</button>{/if}
+          <button class:on={tab === 'combat'} onclick={() => (tab = 'combat')}>
+            Combate{#if session.combat.active}<span class="live" title="Combate em andamento"></span>{/if}
+          </button>
+          <button class:on={tab === 'players'} onclick={() => (tab = 'players')} title="Jogadores">Grupo ({onlineCount})</button>
+          {#if gm}<button class:on={tab === 'settings'} onclick={() => (tab = 'settings')} title="Configurações da mesa">Mesa</button>{/if}
         </nav>
         <div class="tab-body">
           {#if tab === 'chat'}
             <ChatPanel {session} />
           {:else if tab === 'sheets'}
             <SheetsPanel {session} {gm} onTemplates={() => (showTemplates = true)} onPerm={(id) => (permSheet = id)} />
+          {:else if tab === 'combat'}
+            <CombatPanel {session} {gm} />
           {:else if tab === 'players'}
             <PlayersPanel {session} {gm} />
           {:else if gm}
@@ -366,6 +372,15 @@
     color: var(--muted);
     border-bottom: 2px solid transparent;
     font-size: 13px;
+  }
+  .live {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    margin-left: 4px;
+    vertical-align: middle;
   }
   .tabs button.on {
     color: var(--text);
