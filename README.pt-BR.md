@@ -4,7 +4,7 @@
 
 Mesa virtual de RPG grátis que roda no navegador. A campanha fica salva numa pasta no PC do mestre. Sem conta, sem envio de arquivos, sem rastreamento.
 
-**Acesse:** [mauricioaires30.github.io/free-tabletop](https://mauricioaires30.github.io/free-tabletop/)
+**Acesse:** [mauricioaires30.github.io/Free-TableTop](https://mauricioaires30.github.io/Free-TableTop/)
 
 ## Recursos
 - **Campanha na sua pasta:** o mestre escolhe uma pasta uma vez e tudo fica salvo nela: quadro, imagens, fichas, chat, diário e wiki. Funciona no Chrome e no Edge. Nos outros navegadores, a campanha fica no próprio navegador, com backup em `.zip` para baixar e importar.

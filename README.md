@@ -4,7 +4,7 @@
 
 A free virtual tabletop for RPGs that runs in the browser. Campaigns are saved in a folder on the game master's PC. No account, no uploads, no tracking.
 
-**Open it:** [mauricioaires30.github.io/free-tabletop](https://mauricioaires30.github.io/free-tabletop/)
+**Open it:** [mauricioaires30.github.io/Free-TableTop](https://mauricioaires30.github.io/Free-TableTop/)
 
 ## Features
 - **Campaign in your own folder:** the GM picks a folder once and everything is saved there: board, images, sheets, chat, journal and wiki. Works in Chrome and Edge. Other browsers keep the campaign in the browser itself, with a `.zip` backup to download and import.
