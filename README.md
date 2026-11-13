@@ -7,16 +7,21 @@ A free virtual tabletop for RPGs that runs in the browser. Campaigns are saved i
 **Open it:** [mauricioaires30.github.io/free-tabletop](https://mauricioaires30.github.io/free-tabletop/)
 
 ## Features
-- **Campaign in your own folder:** the GM picks a folder once and the board, images and chat history are saved there (`campanha.json`, `quadro.json`, `imagens/`, `log/`). Works in Chrome and Edge. Other browsers keep the campaign in the browser itself.
+- **Campaign in your own folder:** the GM picks a folder once and everything is saved there: board, images, sheets, chat, journal and wiki. Works in Chrome and Edge. Other browsers keep the campaign in the browser itself, with a `.zip` backup to download and import.
 - **Private tables:** every table has a random ID and an invite link (or QR code). Nobody gets in without the link, and tables never see each other.
 - **Free board:** pan and zoom, notes, clue cards with a secret back side, and images you can drag in, paste or upload.
 - **Live cursors:** everyone sees where the players are pointing. The GM's cursor stays hidden.
-- **Permissions per item:** choose who can **see**, **move** and **edit** each thing: everyone, only the GM, the owner, or specific players. Hidden items never reach the players' browsers.
+- **Permissions on everything:** choose who can **see**, **move** and **edit** each item, sheet or page: everyone, only the GM, the owner, or specific players. Hidden things never reach the players' browsers.
+- **Sheets for any system:** the GM builds the sheet template (attributes, resource bars, text, rolls) or starts from a generic, d20 fantasy or paranormal investigation preset. Each player sees only their own sheet, and the GM can share any sheet. Templates can be exported and imported to trade with other GMs.
+- **Rolls from the sheet:** click an attribute to roll its formula, like `1d20+{mod}` or `{v}d20kh1`.
+- **NPCs and monsters:** hidden sheets only the GM sees, with secret initiative.
+- **Combat:** initiative order, rounds and turns, hidden creatures, and damage or healing right on the health bar.
+- **Map:** square or hex grid with snapping, layers (map, objects, tokens), locked backgrounds, tokens linked to sheets with health and conditions, fog of war (rectangle and brush), shared ruler with distances, and pings.
 - **Dice:** `2d6+3`, `4d6kh3`, `2d20kl1`, exploding `1d6!`, `d%`, advantage and disadvantage. Rolls can be public, private to the GM, or hidden.
 - **Chat:** `/r` to roll, `/gr` for a private roll, `/w name` to whisper.
+- **GM tools:** session journal (with a draft from the day's chat), campaign wiki with `[[page]]` links, random tables with weights and nested tables, ready-made generators (names, taverns, weather, encounters, treasure, hooks) and progress clocks on the board.
 - **Word filter:** blocks or censors offensive words in Portuguese, including accents, `p0rr4`, `p.o.r.r.a` and repeated letters. The GM edits the list.
-- **Moderation:** mute, kick and generate a new invite.
-- **"Bring everyone here":** centers every player's view on what the GM is looking at.
+- **Moderation:** mute, kick, and generate a new invite.
 
 ## Host your own
 The site runs on GitHub Pages. A small free [Cloudflare Worker](relay/) relays messages between browsers and stores nothing from the campaign.
@@ -25,10 +30,10 @@ The site runs on GitHub Pages. A small free [Cloudflare Worker](relay/) relays m
 2. In the repository, set the Actions variable `RELAY_URL` to the worker address using `wss://` (for example `wss://free-tabletop-relay.YOUR-ACCOUNT.workers.dev`).
 3. In **Settings → Pages**, choose **GitHub Actions** as the source. Every push to `main` publishes the site.
 
-To run it locally, use `npm install`, then `npm run dev:relay` and `npm run dev`, and open `localhost:5173/free-tabletop/`.
+To run it locally, use `npm install`, then `npm run dev:relay` and `npm run dev`, and open `localhost:5173/free-tabletop/`. Tests: `npm test`.
 
 ## Disclaimer
-The table only works while the GM has the campaign open. Each GM is responsible for the content shared at their table.
+The table only works while the GM has the campaign open. Each GM is responsible for the content shared at their table. The fog of war is visual: to truly hide something, also use permissions.
 
 ## Portfolio
 [mauricioaires30.github.io](https://mauricioaires30.github.io/)

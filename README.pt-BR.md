@@ -7,16 +7,21 @@ Mesa virtual de RPG grátis que roda no navegador. A campanha fica salva numa pa
 **Acesse:** [mauricioaires30.github.io/free-tabletop](https://mauricioaires30.github.io/free-tabletop/)
 
 ## Recursos
-- **Campanha na sua pasta:** o mestre escolhe uma pasta uma vez, e o quadro, as imagens e o histórico do chat ficam salvos nela (`campanha.json`, `quadro.json`, `imagens/`, `log/`). Funciona no Chrome e no Edge. Nos outros navegadores, a campanha fica salva no próprio navegador.
+- **Campanha na sua pasta:** o mestre escolhe uma pasta uma vez e tudo fica salvo nela: quadro, imagens, fichas, chat, diário e wiki. Funciona no Chrome e no Edge. Nos outros navegadores, a campanha fica no próprio navegador, com backup em `.zip` para baixar e importar.
 - **Mesas privadas:** cada mesa tem um ID aleatório e um link de convite (ou QR code). Ninguém entra sem o link, e uma mesa nunca enxerga a outra.
 - **Quadro livre:** zoom e arrastar, notas, cartas de pista com verso secreto e imagens que dá para arrastar, colar ou enviar.
 - **Cursores ao vivo:** todo mundo vê para onde os jogadores estão apontando. O cursor do mestre fica escondido.
-- **Permissões por item:** escolha quem pode **ver**, **mover** e **editar** cada coisa: todos, só o mestre, o dono ou jogadores específicos. Itens ocultos nunca chegam ao navegador dos jogadores.
+- **Permissões em tudo:** escolha quem pode **ver**, **mover** e **editar** cada item, ficha ou página: todos, só o mestre, o dono ou jogadores específicos. O que está oculto nunca chega ao navegador dos jogadores.
+- **Fichas para qualquer sistema:** o mestre monta o modelo de ficha (atributos, barras, textos, rolagens) ou parte de um pronto: genérico, fantasia d20 ou investigação paranormal. Cada jogador vê só a própria ficha, e o mestre pode liberar qualquer ficha. Modelos podem ser exportados e importados para trocar com outros mestres.
+- **Rolagens pela ficha:** clique num atributo para rolar a fórmula dele, como `1d20+{mod}` ou `{v}d20kh1`.
+- **NPCs e monstros:** fichas ocultas que só o mestre vê, com iniciativa secreta.
+- **Combate:** ordem de iniciativa, rodadas e turnos, criaturas ocultas e dano ou cura direto na barra de vida.
+- **Mapa:** grid quadrado ou hexagonal com encaixe, camadas (mapa, objetos, tokens), fundo travado, tokens ligados às fichas com vida e condições, névoa de guerra (retângulo e pincel), régua compartilhada com distância e pings.
 - **Dados:** `2d6+3`, `4d6kh3`, `2d20kl1`, `1d6!` explosivo, `d%`, vantagem e desvantagem. A rolagem pode ser pública, só para o mestre ou oculta.
 - **Chat:** `/r` para rolar, `/gr` para rolagem privada, `/w nome` para sussurrar.
+- **Ferramentas do mestre:** diário de sessões (com rascunho a partir do chat do dia), wiki da campanha com links `[[página]]`, tabelas aleatórias com pesos e tabelas aninhadas, geradores prontos (nomes, tavernas, clima, encontros, tesouros, ganchos) e relógios de progresso no quadro.
 - **Filtro de palavras:** bloqueia ou censura palavrões, pegando acentos, `p0rr4`, `p.o.r.r.a` e letras repetidas. O mestre edita a lista.
 - **Moderação:** silenciar, expulsar e gerar um novo convite.
-- **"Trazer todos":** centraliza a visão de todos os jogadores no que o mestre está vendo.
 
 ## Hospede a sua
 O site roda no GitHub Pages. Um pequeno [Cloudflare Worker](relay/) gratuito repassa as mensagens entre os navegadores e não guarda nada da campanha.
@@ -25,10 +30,10 @@ O site roda no GitHub Pages. Um pequeno [Cloudflare Worker](relay/) gratuito rep
 2. No repositório, crie a variável de Actions `RELAY_URL` com o endereço do worker usando `wss://` (por exemplo `wss://free-tabletop-relay.SUA-CONTA.workers.dev`).
 3. Em **Settings → Pages**, escolha **GitHub Actions** como fonte. Cada push na `main` publica o site.
 
-Para rodar localmente, use `npm install`, depois `npm run dev:relay` e `npm run dev`, e abra `localhost:5173/free-tabletop/`.
+Para rodar localmente, use `npm install`, depois `npm run dev:relay` e `npm run dev`, e abra `localhost:5173/free-tabletop/`. Testes: `npm test`.
 
 ## Aviso
-A mesa só funciona enquanto o mestre estiver com a campanha aberta. Cada mestre é responsável pelo que é compartilhado na sua mesa.
+A mesa só funciona enquanto o mestre estiver com a campanha aberta. Cada mestre é responsável pelo que é compartilhado na sua mesa. A névoa de guerra é visual: para esconder algo de verdade, use também as permissões.
 
 ## Portfólio
 [mauricioaires30.github.io](https://mauricioaires30.github.io/)
