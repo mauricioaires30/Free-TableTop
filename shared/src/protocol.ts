@@ -85,7 +85,7 @@ export type PlayerIntent =
   | { k: 'img'; hash: string }
   | { k: 'sheetNew'; templateId: string; name: string }
   | { k: 'sheetSet'; id: string; values: Record<string, FieldValue>; name?: string }
-  | { k: 'sheetRoll'; id: string; field: string; priv: boolean }
+  | { k: 'sheetRoll'; id: string; field: string; priv: boolean; row?: string }
   | { k: 'initRoll'; sheetId: string }
   | { k: 'ruler'; pts: number[] | null }
   | { k: 'ping'; x: number; y: number }
@@ -187,10 +187,11 @@ export function parsePlayerIntent(x: unknown): PlayerIntent | null {
       if (!isStr(x.id, 64) || !ID_RE.test(x.id) || !isObj(x.values)) return null;
       if (x.name !== undefined && (!isStr(x.name, 60) || !x.name.trim())) return null;
       return { k: 'sheetSet', id: x.id, values: x.values as Record<string, FieldValue>, ...(x.name ? { name: x.name.trim() } : {}) };
-    case 'sheetRoll':
-      return isStr(x.id, 64) && ID_RE.test(x.id) && isStr(x.field, 30)
-        ? { k: 'sheetRoll', id: x.id, field: x.field, priv: x.priv === true }
-        : null;
+    case 'sheetRoll': {
+      if (!isStr(x.id, 64) || !ID_RE.test(x.id) || !isStr(x.field, 30)) return null;
+      if (x.row !== undefined && !isStr(x.row, 32)) return null;
+      return { k: 'sheetRoll', id: x.id, field: x.field, priv: x.priv === true, ...(x.row ? { row: x.row } : {}) };
+    }
     case 'initRoll':
       return isStr(x.sheetId, 64) && ID_RE.test(x.sheetId) ? { k: 'initRoll', sheetId: x.sheetId } : null;
     case 'ruler':

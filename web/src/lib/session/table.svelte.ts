@@ -169,7 +169,7 @@ export abstract class TableSession {
   abstract zorder(id: string, dir: 'front' | 'back'): void;
   abstract newSheet(templateId: string, name: string): void;
   abstract setSheet(id: string, values: Record<string, FieldValue>, name?: string): void;
-  abstract rollSheet(id: string, field: string, priv: boolean): void;
+  abstract rollSheet(id: string, field: string, priv: boolean, row?: string): void;
   abstract rollInitiative(sheetId: string): void;
   abstract editNote(col: 'journal' | 'wiki', id: string, patch: { title?: string; text?: string }): void;
   abstract rollTable(id: string, priv: boolean): void;

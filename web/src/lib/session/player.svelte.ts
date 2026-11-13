@@ -193,9 +193,9 @@ export class PlayerSession extends TableSession {
     this.intent({ k: 'sheetSet', id, values, ...(name ? { name } : {}) });
   }
 
-  rollSheet(id: string, field: string, priv: boolean) {
+  rollSheet(id: string, field: string, priv: boolean, row?: string) {
     if (this.muted) return this.toast('O mestre silenciou você.', 'error');
-    if (this.canSend()) this.intent({ k: 'sheetRoll', id, field, priv });
+    if (this.canSend()) this.intent({ k: 'sheetRoll', id, field, priv, ...(row ? { row } : {}) });
   }
 
   rollInitiative(sheetId: string) {

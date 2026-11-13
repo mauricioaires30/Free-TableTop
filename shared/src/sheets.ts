@@ -1,7 +1,18 @@
 // Modelos de ficha (o mestre define o sistema) e fichas de personagem.
 import type { Perm } from './permissions';
 
-export type FieldType = 'section' | 'text' | 'number' | 'attr' | 'resource' | 'textarea' | 'check';
+export type FieldType = 'section' | 'text' | 'number' | 'attr' | 'resource' | 'textarea' | 'check' | 'list';
+
+/** Uma linha de um campo "list": item do inventário, equipamento ou poder/magia. */
+export interface ListRow {
+  id: string;
+  name: string;
+  qty?: number;
+  equipped?: boolean;
+  note?: string;
+  /** Fórmula rolada ao clicar nesta linha (dano de uma arma, efeito de um poder...). */
+  roll?: string;
+}
 
 export interface TemplateField {
   /** Identificador curto usado nas fórmulas: {for}, {pv.max}. */
@@ -16,6 +27,11 @@ export interface TemplateField {
   color?: string;
   /** Ocupa a linha inteira. */
   wide?: boolean;
+  /** list: quais colunas mostrar (o mestre escolhe por campo: inventário, equipamento, poderes...). */
+  showQty?: boolean;
+  showEquipped?: boolean;
+  showNote?: boolean;
+  showRoll?: boolean;
 }
 
 export interface SheetTemplate {
@@ -37,7 +53,7 @@ export interface ResourceValue {
   max: number;
 }
 
-export type FieldValue = string | number | boolean | ResourceValue;
+export type FieldValue = string | number | boolean | ResourceValue | ListRow[];
 
 export interface Sheet {
   id: string;
@@ -70,6 +86,7 @@ export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   resource: 'Barra (atual/máx.)',
   textarea: 'Texto longo',
   check: 'Marcador',
+  list: 'Lista (inventário, equipamento, poderes...)',
 };
 
 export const FIELD_ID_RE = /^[a-z][a-z0-9_]{0,23}$/;
@@ -96,6 +113,7 @@ export function isResource(v: unknown): v is ResourceValue {
 
 export function numericValue(v: FieldValue | undefined): number {
   if (typeof v === 'number') return v;
+  if (Array.isArray(v)) return v.length;
   if (isResource(v)) return v.cur;
   if (typeof v === 'boolean') return v ? 1 : 0;
   if (typeof v === 'string') {
@@ -124,8 +142,19 @@ export function defaultValue(f: TemplateField, t?: Pick<SheetTemplate, 'attrMod'
       return { cur: f.max ?? 10, max: f.max ?? 10 };
     case 'check':
       return false;
+    case 'list':
+      return [];
   }
 }
+
+/** Id curto para uma linha de lista (item, equipamento, poder). */
+export function newRowId(): string {
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
+  return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+export const MAX_LIST_ROWS = 80;
 
 export function defaultValues(t: SheetTemplate): Record<string, FieldValue> {
   const out: Record<string, FieldValue> = {};
@@ -191,7 +220,45 @@ export function sanitizeValues(t: SheetTemplate, raw: unknown): Record<string, F
       case 'check':
         if (typeof v === 'boolean') out[k] = v;
         break;
+      case 'list': {
+        const rows = sanitizeListRows(v);
+        if (rows) out[k] = rows;
+        break;
+      }
     }
+  }
+  return out;
+}
+
+const ROW_ID_RE = /^[a-f0-9]{8,32}$/;
+
+/** Valida uma lista de linhas (inventário, equipamento, poderes) vinda do jogador. */
+export function sanitizeListRows(raw: unknown): ListRow[] | null {
+  if (!Array.isArray(raw) || raw.length > MAX_LIST_ROWS) return null;
+  const out: ListRow[] = [];
+  for (const r of raw) {
+    if (typeof r !== 'object' || r === null) return null;
+    const row = r as Record<string, unknown>;
+    if (typeof row.id !== 'string' || !ROW_ID_RE.test(row.id)) return null;
+    if (typeof row.name !== 'string' || row.name.length > 80) return null;
+    const clean: ListRow = { id: row.id, name: row.name };
+    if (row.qty !== undefined) {
+      if (typeof row.qty !== 'number' || !Number.isFinite(row.qty) || row.qty < 0 || row.qty > 9999) return null;
+      clean.qty = row.qty;
+    }
+    if (row.equipped !== undefined) {
+      if (typeof row.equipped !== 'boolean') return null;
+      clean.equipped = row.equipped;
+    }
+    if (row.note !== undefined) {
+      if (typeof row.note !== 'string' || row.note.length > 500) return null;
+      clean.note = row.note;
+    }
+    if (row.roll !== undefined) {
+      if (typeof row.roll !== 'string' || row.roll.length > 100) return null;
+      clean.roll = row.roll;
+    }
+    out.push(clean);
   }
   return out;
 }
@@ -208,6 +275,11 @@ const attr = (id: string, label: string, roll: string): TemplateField => ({ id, 
 const res = (id: string, label: string, max: number, color: string): TemplateField => ({ id, label, type: 'resource', max, color });
 const section = (id: string, label: string): TemplateField => ({ id, label, type: 'section' });
 const long = (id: string, label: string): TemplateField => ({ id, label, type: 'textarea', wide: true });
+const list = (
+  id: string,
+  label: string,
+  cfg: Partial<Pick<TemplateField, 'showQty' | 'showEquipped' | 'showRoll'>> = {},
+): TemplateField => ({ id, label, type: 'list', wide: true, showNote: true, ...cfg });
 
 /** Modelos prontos para o mestre começar (todos editáveis). */
 export const TEMPLATE_PRESETS: Preset[] = [
@@ -221,7 +293,7 @@ export const TEMPLATE_PRESETS: Preset[] = [
       res('pv', 'Vida', 10, '#c0392b'),
       res('energia', 'Energia', 10, '#2e86de'),
       long('habilidades', 'Habilidades'),
-      long('inventario', 'Inventário'),
+      list('inventario', 'Inventário', { showQty: true }),
       long('notas', 'Anotações'),
     ],
   },
@@ -245,8 +317,8 @@ export const TEMPLATE_PRESETS: Preset[] = [
       attr('car', 'Carisma', '1d20+{mod}'),
       section('detalhes', 'Detalhes'),
       long('pericias', 'Perícias e proficiências'),
-      long('magias', 'Magias e habilidades'),
-      long('equipamento', 'Equipamento'),
+      list('magias', 'Magias e habilidades', { showRoll: true }),
+      list('equipamento', 'Equipamento', { showQty: true, showEquipped: true }),
     ],
   },
   {
@@ -270,8 +342,8 @@ export const TEMPLATE_PRESETS: Preset[] = [
       res('san', 'Sanidade', 12, '#8e44ad'),
       res('esf', 'Esforço', 3, '#d9a75b'),
       long('pericias', 'Perícias'),
-      long('rituais', 'Rituais e poderes'),
-      long('inventario', 'Inventário'),
+      list('rituais', 'Rituais e poderes', { showRoll: true }),
+      list('inventario', 'Inventário', { showQty: true, showEquipped: true }),
     ],
   },
   {

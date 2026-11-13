@@ -84,6 +84,7 @@
   function setType(f: TemplateField, t: FieldType) {
     f.type = t;
     if (t === 'resource' && !f.max) f.max = 10;
+    if (t === 'list' && f.showNote === undefined) f.showNote = true;
     change();
   }
 
@@ -201,7 +202,7 @@
                 <select value={f.type} onchange={(e) => setType(f, e.currentTarget.value as FieldType)} aria-label="Tipo">
                   {#each Object.entries(FIELD_TYPE_LABELS) as [k, v] (k)}<option value={k}>{v}</option>{/each}
                 </select>
-                {#if f.type !== 'section' && f.type !== 'check'}
+                {#if f.type !== 'section' && f.type !== 'check' && f.type !== 'list'}
                   <input class="froll" value={f.roll ?? ''} oninput={(e) => ((f.roll = e.currentTarget.value), change())} placeholder="rolagem (opcional)" aria-label="Fórmula de rolagem" />
                 {:else}
                   <span class="froll"></span>
@@ -214,6 +215,15 @@
                 <code title="Use nas fórmulas">&#123;{f.id}&#125;</code>
                 <button class="ghost tiny danger" onclick={() => removeField(i)} aria-label="Remover campo">✕</button>
               </div>
+              {#if f.type === 'list'}
+                <div class="list-cfg">
+                  <span class="muted">Colunas:</span>
+                  <label><input type="checkbox" bind:checked={f.showQty} onchange={change} /> quantidade</label>
+                  <label><input type="checkbox" bind:checked={f.showEquipped} onchange={change} /> equipado</label>
+                  <label><input type="checkbox" bind:checked={f.showNote} onchange={change} /> nota</label>
+                  <label><input type="checkbox" bind:checked={f.showRoll} onchange={change} /> rolagem por item (ex.: dano de uma arma)</label>
+                </div>
+              {/if}
             {/each}
           </div>
           <button onclick={addField}>+ Adicionar campo</button>
@@ -298,6 +308,20 @@
   .frow input,
   .frow select {
     padding: 6px 8px;
+  }
+  .list-cfg {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+    padding: 2px 0 6px 32px;
+    font-size: 12px;
+  }
+  .list-cfg label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--text);
+    cursor: pointer;
   }
   .order {
     display: flex;

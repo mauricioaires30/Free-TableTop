@@ -10,6 +10,7 @@ import {
   type EditPatch, type FieldValue, type FilterConfig, type GmMessage, type LogEntry, type Peer, type Perm,
   type PlayerIntent, type RelayToClient, type Roster, type Sheet, type SheetTemplate, type TableSettings,
   type JournalEntry, type WikiPage, type RandomTable, type FogShape, type GridSettings, type Layer, type MapSettings, type TransformPatch,
+  type ListRow,
 } from '@ftt/shared';
 import { RelayClient } from '../net/client';
 import { fromBase64, GmImages, processImage } from '../images/images';
@@ -205,7 +206,7 @@ export class GmSession extends TableSession {
         return this.applySheetSet(actor, d.id, d.values, d.name);
       case 'sheetRoll':
         if (r?.muted) return this.notify(actor, 'O mestre silenciou você.');
-        return this.doSheetRoll(actor, d.id, d.field, d.priv);
+        return this.doSheetRoll(actor, d.id, d.field, d.priv, d.row);
       case 'initRoll':
         return this.doInitRoll(actor, d.sheetId);
       case 'ruler':
@@ -720,12 +721,23 @@ export class GmSession extends TableSession {
     }
   }
 
-  private doSheetRoll(actor: Actor, id: string, field: string, priv: boolean) {
+  private doSheetRoll(actor: Actor, id: string, field: string, priv: boolean, rowId?: string) {
     const sheet = this.docs.sheets[id];
     if (!sheet || !can(actor, 'view', sheet)) return;
-    const f = this.templateOf(sheet)?.fields.find((x) => x.id === field && x.roll);
+    const f = this.templateOf(sheet)?.fields.find((x) => x.id === field);
     if (!f) return;
-    const expr = this.formula(actor, sheet, f.roll!, f.id);
+    if (rowId) {
+      // Rolagem de uma linha da lista (item, poder...), não do campo inteiro.
+      if (f.type !== 'list') return;
+      const rows = sheet.values[field];
+      const row = Array.isArray(rows) ? (rows as ListRow[]).find((r) => r.id === rowId) : undefined;
+      if (!row?.roll) return;
+      const expr = this.formula(actor, sheet, row.roll);
+      if (expr) this.doRoll(actor, expr, priv, `${sheet.name}: ${row.name}`);
+      return;
+    }
+    if (!f.roll) return;
+    const expr = this.formula(actor, sheet, f.roll, f.id);
     if (expr) this.doRoll(actor, expr, priv, `${sheet.name}: ${f.label}`);
   }
 
@@ -841,8 +853,8 @@ export class GmSession extends TableSession {
     this.applySheetSet(this.actor, id, values, name);
   }
 
-  rollSheet(id: string, field: string, priv: boolean) {
-    this.doSheetRoll(this.actor, id, field, priv);
+  rollSheet(id: string, field: string, priv: boolean, row?: string) {
+    this.doSheetRoll(this.actor, id, field, priv, row);
   }
 
   rollInitiative(sheetId: string) {

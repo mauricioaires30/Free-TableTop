@@ -1,7 +1,7 @@
 <script lang="ts">
   import {
-    attrModifier, can, colorFor, isPlayerSheet, isResource, numericValue,
-    type FieldValue, type ResourceValue, type TemplateField,
+    attrModifier, can, colorFor, isPlayerSheet, isResource, newRowId, numericValue,
+    type FieldValue, type ListRow, type ResourceValue, type TemplateField,
   } from '@ftt/shared';
   import type { TableSession } from '../lib/session/table.svelte';
   import LiveInput from './LiveInput.svelte';
@@ -80,6 +80,20 @@
     session.rollSheet(id, f.id, priv);
   }
 
+  function listRows(fid: string): ListRow[] {
+    const v = sheet?.values[fid];
+    return Array.isArray(v) ? (v as ListRow[]) : [];
+  }
+  function addRow(fid: string) {
+    set(fid, [...listRows(fid), { id: newRowId(), name: '' }]);
+  }
+  function setRow(fid: string, rowId: string, patch: Partial<ListRow>) {
+    set(fid, listRows(fid).map((r) => (r.id === rowId ? { ...r, ...patch } : r)));
+  }
+  function removeRow(fid: string, rowId: string) {
+    set(fid, listRows(fid).filter((r) => r.id !== rowId));
+  }
+
   const modText = (f: TemplateField) => {
     if (!tpl || tpl.attrMod !== 'd20') return '';
     const m = attrModifier(tpl, numericValue(sheet?.values[f.id]));
@@ -95,7 +109,9 @@
     style:z-index={z}
     onpointerdown={onFocus}
     aria-label="Ficha de {sheet.name}"
+    style:--accent-hue={sheet.color ?? (owner ? colorFor(owner) : 'var(--accent-2)')}
   >
+    <div class="crest" aria-hidden="true"></div>
     <header onpointerdown={down} onpointermove={move} onpointerup={up}>
       <button
         class="avbtn"
@@ -168,6 +184,81 @@
               </div>
               <div class="bar"><div style:width="{r.max > 0 ? Math.max(0, Math.min(100, (r.cur / r.max) * 100)) : 0}%" style:background={f.color ?? 'var(--accent)'}></div></div>
             </div>
+          {:else if f.type === 'list'}
+            {@const rows = listRows(f.id)}
+            <div class="list full">
+              <span class="lbl">{f.label}</span>
+              {#if rows.length === 0}
+                <p class="muted small empty-list">{editable ? 'Vazio. Use "+ adicionar".' : 'Vazio.'}</p>
+              {/if}
+              {#each rows as row (row.id)}
+                <div class="row-item" class:equipped={row.equipped}>
+                  {#if f.showRoll && row.roll}
+                    <button class="ghost tiny roll" title="Rolar {row.roll}" onclick={() => session.rollSheet(id, f.id, priv, row.id)}>🎲</button>
+                  {/if}
+                  <LiveInput
+                    class="rn"
+                    value={row.name}
+                    disabled={!editable}
+                    label="Nome do item"
+                    maxlength={80}
+                    placeholder="nome"
+                    onCommit={(v) => setRow(f.id, row.id, { name: String(v) })}
+                  />
+                  {#if f.showQty}
+                    <LiveInput
+                      class="rq"
+                      type="number"
+                      value={row.qty ?? 1}
+                      disabled={!editable}
+                      label="Quantidade de {row.name || f.label}"
+                      onCommit={(v) => setRow(f.id, row.id, { qty: Math.max(0, Number(v)) })}
+                    />
+                  {/if}
+                  {#if f.showEquipped}
+                    <label class="eq" title={row.equipped ? 'Equipado' : 'Equipar'}>
+                      <input
+                        type="checkbox"
+                        checked={!!row.equipped}
+                        disabled={!editable}
+                        onchange={(e) => setRow(f.id, row.id, { equipped: (e.currentTarget as HTMLInputElement).checked })}
+                      />
+                    </label>
+                  {/if}
+                  {#if editable}
+                    <button class="ghost tiny danger" title="Remover" aria-label="Remover {row.name || 'item'}" onclick={() => removeRow(f.id, row.id)}>✕</button>
+                  {/if}
+                </div>
+                {#if f.showNote || (f.showRoll && editable)}
+                  <div class="row-extra">
+                    {#if f.showNote}
+                      <LiveInput
+                        class="rnote"
+                        value={row.note ?? ''}
+                        disabled={!editable}
+                        label="Nota de {row.name || f.label}"
+                        maxlength={500}
+                        placeholder="nota (opcional)"
+                        onCommit={(v) => setRow(f.id, row.id, { note: String(v) })}
+                      />
+                    {/if}
+                    {#if f.showRoll && editable}
+                      <LiveInput
+                        class="rroll"
+                        value={row.roll ?? ''}
+                        label="Fórmula de rolagem de {row.name || f.label}"
+                        maxlength={100}
+                        placeholder="fórmula (ex.: 1d8+2)"
+                        onCommit={(v) => setRow(f.id, row.id, { roll: String(v) || undefined })}
+                      />
+                    {/if}
+                  </div>
+                {/if}
+              {/each}
+              {#if editable}
+                <button class="ghost small add" onclick={() => addRow(f.id)}>+ adicionar</button>
+              {/if}
+            </div>
           {:else if f.type === 'check'}
             <label class="check" class:full={f.wide}>
               <input type="checkbox" checked={!!sheet.values[f.id]} disabled={!editable} onchange={(e) => set(f.id, (e.currentTarget as HTMLInputElement).checked)} />
@@ -210,10 +301,16 @@
     max-height: calc(100vh - 90px);
     display: flex;
     flex-direction: column;
-    background: var(--panel);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--accent-hue) 7%, var(--panel)), var(--panel) 90px);
     border: 1px solid var(--border);
     border-radius: 12px;
-    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55), 0 0 0 1px color-mix(in srgb, var(--accent-hue) 25%, transparent) inset;
+    overflow: hidden;
+  }
+  .crest {
+    height: 4px;
+    flex: none;
+    background: linear-gradient(90deg, transparent, var(--accent-hue), transparent);
   }
   header {
     display: flex;
@@ -359,15 +456,83 @@
     padding: 2px 8px;
   }
   .bar {
-    height: 8px;
+    height: 10px;
     background: var(--bg);
     border-radius: 99px;
     overflow: hidden;
     margin-top: 6px;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.6);
   }
   .bar div {
     height: 100%;
     transition: width 0.25s;
+    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.35), transparent 55%);
+  }
+  .list {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .empty-list {
+    margin: 0;
+    font-size: 12px;
+  }
+  .row-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 5px 7px;
+  }
+  .row-item.equipped {
+    border-color: color-mix(in srgb, var(--accent-hue) 55%, var(--border));
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-hue) 30%, transparent) inset;
+  }
+  .row-item :global(.rn) {
+    flex: 1;
+    min-width: 0;
+    padding: 4px 7px;
+  }
+  .row-item :global(.rq) {
+    width: 44px;
+    text-align: center;
+    padding: 4px;
+    flex: none;
+  }
+  .eq {
+    display: flex;
+    margin: 0;
+    flex: none;
+    cursor: pointer;
+  }
+  .row-item .tiny {
+    flex: none;
+    padding: 2px 7px;
+  }
+  .row-extra {
+    display: flex;
+    gap: 6px;
+    padding-left: 4px;
+  }
+  .row-extra :global(.rnote) {
+    flex: 1;
+    min-width: 0;
+    padding: 3px 7px;
+    font-size: 12px;
+  }
+  .row-extra :global(.rroll) {
+    width: 110px;
+    flex: none;
+    padding: 3px 7px;
+    font-size: 12px;
+    font-family: ui-monospace, monospace;
+  }
+  .add {
+    align-self: flex-start;
+    font-size: 12px;
+    padding: 4px 10px;
   }
   .check {
     display: flex;
