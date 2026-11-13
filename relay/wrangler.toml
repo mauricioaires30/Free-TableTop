@@ -1,0 +1,19 @@
+# Relay do Free TableTop: só repassa mensagens entre mestre e jogadores de cada sala.
+# Nenhum dado de campanha é guardado aqui (apenas o hash da chave do mestre,
+# o token de convite atual e a lista de jogadores expulsos).
+name = "free-tabletop-relay"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+
+[[durable_objects.bindings]]
+name = "ROOM"
+class_name = "Room"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room"]
+
+[vars]
+# Domínios que podem abrir salas, separados por vírgula (ex.: "https://seuusuario.github.io").
+# Vazio = qualquer origem. localhost sempre é permitido para desenvolvimento.
+ALLOWED_ORIGINS = ""
