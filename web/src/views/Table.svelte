@@ -20,6 +20,7 @@
   import TokenDialog from '../components/TokenDialog.svelte';
   import NotesPanel from '../components/NotesPanel.svelte';
   import NoteWindow from '../components/NoteWindow.svelte';
+  import DiceTray from '../components/DiceTray.svelte';
 
   let { session, gm = null, onLeave }: { session: TableSession; gm?: GmSession | null; onLeave?: () => void } = $props();
 
@@ -242,6 +243,7 @@
         <div class="banner">O mestre está offline. A mesa volta quando ele abrir a campanha.</div>
       {/if}
       <ToolPalette bind:tool bind:fogBrush {gm} />
+      <DiceTray {session} />
       <div class="zoom">
         <button onclick={() => renderer?.zoomBy(1.25)} aria-label="Aproximar">＋</button>
         <button onclick={() => renderer?.zoomBy(0.8)} aria-label="Afastar">－</button>

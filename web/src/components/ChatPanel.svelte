@@ -2,19 +2,18 @@
   import { tick } from 'svelte';
   import { colorFor, type LogEntry } from '@ftt/shared';
   import type { TableSession } from '../lib/session/table.svelte';
-  import RollView from './RollView.svelte';
 
   let { session }: { session: TableSession } = $props();
 
   let text = $state('');
-  let priv = $state(false);
   let listEl: HTMLDivElement;
   let stick = true;
 
-  const DICE = ['d4', 'd6', 'd8', 'd10', 'd12', 'd20', 'd100'];
+  // O chat é só conversa: rolagens ficam na bandeja de dados sobre o quadro.
+  const messages = $derived(session.log.filter((e) => e.kind === 'chat' || e.kind === 'system'));
 
   $effect(() => {
-    void session.log.length;
+    void messages.length;
     tick().then(() => {
       if (stick && listEl) listEl.scrollTop = listEl.scrollHeight;
     });
@@ -34,10 +33,7 @@
 
   function privacy(e: LogEntry): string | null {
     if (!e.to) return null;
-    if (e.to.length === 0) {
-      if (e.kind === 'roll') return e.from === 'gm' ? 'rolagem oculta' : 'rolagem para o mestre';
-      return 'sussurro para o mestre';
-    }
+    if (e.to.length === 0) return 'sussurro para o mestre';
     return `sussurro para ${e.to.map((p) => session.nameOf(p)).join(', ')}`;
   }
 
@@ -46,10 +42,10 @@
 
 <div class="chat">
   <div class="log" bind:this={listEl} onscroll={onScroll}>
-    {#if session.log.length === 0}
-      <p class="muted empty">Nada por aqui ainda. Role um dado ou diga oi!</p>
+    {#if messages.length === 0}
+      <p class="muted empty">Nada por aqui ainda. Diga oi! Os dados ficam na bandeja 🎲 do quadro.</p>
     {/if}
-    {#each session.log as e (e.id)}
+    {#each messages as e (e.id)}
       {@const p = privacy(e)}
       <div class="entry" class:private={!!p} class:system={e.kind === 'system'}>
         <div class="meta">
@@ -57,42 +53,23 @@
           {#if p}<span class="tag">🔒 {p}</span>{/if}
           <span class="time">{time(e.ts)}</span>
         </div>
-        {#if e.kind === 'table'}
-          <div class="label">🎲 {e.label}</div>
-          <div class="table-result">{e.text}</div>
-        {:else if e.kind === 'roll' && e.roll}
-          {#if e.label}<div class="label">{e.label}</div>{/if}
-          <RollView roll={e.roll} />
-        {:else}
-          <div class="text">{e.text}</div>
-        {/if}
+        <div class="text">{e.text}</div>
       </div>
     {/each}
   </div>
 
   <div class="tray">
-    <div class="dice-row">
-      {#each DICE as d (d)}
-        <button class="die-btn" title="Rolar 1{d}" onclick={() => session.roll(d, priv)}>{d}</button>
-      {/each}
-      <button class="die-btn" title="Vantagem: 2d20, fica o maior" onclick={() => session.roll('adv', priv)}>vant</button>
-      <button class="die-btn" title="Desvantagem: 2d20, fica o menor" onclick={() => session.roll('dis', priv)}>desv</button>
-    </div>
-    <label class="priv">
-      <input type="checkbox" bind:checked={priv} />
-      {session.role === 'gm' ? 'Rolagem oculta (só você vê)' : 'Rolagem privada (só o mestre vê)'}
-    </label>
     <div class="row">
       <input
         bind:value={text}
         maxlength="1000"
-        placeholder={session.role === 'gm' ? 'Mensagem, /r 2d6+3, /w Nome…' : 'Mensagem, /r 1d20+5, /w mestre…'}
+        placeholder={session.role === 'gm' ? 'Mensagem ou /w Nome…' : 'Mensagem ou /w mestre…'}
         onkeydown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), send())}
         aria-label="Mensagem"
       />
       <button class="primary" onclick={send} disabled={!text.trim()}>Enviar</button>
     </div>
-    <p class="help muted">/r 2d20kh1+4 · /gr 1d20 (privado) · /w nome mensagem · 4d6kh3 · 1d6! (explode)</p>
+    <p class="help muted">/w nome mensagem sussurra · /r 1d20 também rola (o resultado vai para a bandeja 🎲)</p>
   </div>
 </div>
 
@@ -140,20 +117,6 @@
     font-size: 11px;
     color: var(--muted);
   }
-  .label {
-    font-size: 12px;
-    color: var(--accent-2);
-    margin-top: 2px;
-  }
-  .table-result {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-left: 3px solid var(--accent-2);
-    border-radius: 8px;
-    padding: 6px 10px;
-    margin-top: 3px;
-    white-space: pre-wrap;
-  }
   .text {
     white-space: pre-wrap;
     overflow-wrap: anywhere;
@@ -164,24 +127,6 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
-  }
-  .dice-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-  }
-  .die-btn {
-    padding: 4px 8px;
-    font-size: 12px;
-    font-weight: 600;
-  }
-  .priv {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-    margin: 0;
-    font-size: 12px;
-    cursor: pointer;
   }
   .help {
     margin: 0;
