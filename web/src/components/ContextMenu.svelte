@@ -49,9 +49,9 @@
     position: fixed;
     z-index: 41;
     min-width: 200px;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 10px;
+    background: var(--wood-dark);
+    border: 1px solid #5a4630;
+    border-radius: 8px;
     padding: 5px;
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
     display: flex;

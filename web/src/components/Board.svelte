@@ -130,12 +130,12 @@
   .board {
     position: absolute;
     inset: 0;
-    background-color: #12141a;
+    background-color: #15110d;
     background-image:
-      linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-      linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+      linear-gradient(rgba(212, 175, 106, 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(212, 175, 106, 0.035) 1px, transparent 1px),
+      linear-gradient(rgba(212, 175, 106, 0.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(212, 175, 106, 0.06) 1px, transparent 1px);
     overflow: hidden;
     touch-action: none;
   }

@@ -36,6 +36,16 @@
   type Tab = 'chat' | 'sheets' | 'combat' | 'notes' | 'players' | 'settings';
   let permNote = $state<{ col: 'journal' | 'wiki' | 'tables'; id: string } | null>(null);
   let tab = $state<Tab>('chat');
+
+  /** Abas do painel, com uma frase explicando o que tem em cada uma. */
+  const TABS: Array<{ id: Tab; icon: string; name: string; gmOnly?: boolean; help: (gm: boolean) => string }> = [
+    { id: 'chat', icon: '💬', name: 'Chat', help: () => 'Conversa da mesa. /w nome para sussurrar; os dados ficam na bandeja 🎲.' },
+    { id: 'sheets', icon: '📜', name: 'Fichas', help: (g) => (g ? 'Personagens, NPCs e inimigos. 🪙 põe no mapa, 🔐 libera para alguém.' : 'Sua ficha. Clique num atributo para rolar.') },
+    { id: 'combat', icon: '⚔️', name: 'Combate', help: (g) => (g ? 'Ordem de iniciativa, turnos e vida. Botão direito num token: entrar no combate.' : 'Ordem dos turnos. Role sua iniciativa aqui.') },
+    { id: 'notes', icon: '📖', name: 'Notas', help: (g) => (g ? 'Diário das sessões, wiki da campanha e tabelas aleatórias.' : 'Páginas e tabelas que o mestre liberou.') },
+    { id: 'players', icon: '👥', name: 'Grupo', help: (g) => (g ? 'Quem está na mesa: silenciar, expulsar e convidar.' : 'Quem está na mesa.') },
+    { id: 'settings', icon: '⚙️', name: 'Mesa', gmOnly: true, help: () => 'Convite, mapa, atributos, combate, fichas e filtro.' },
+  ];
   let showTemplates = $state(false);
   let permSheet = $state<string | null>(null);
   /** Ordem de empilhamento das janelas de ficha (a última fica na frente). */
@@ -231,16 +241,19 @@
 
     <div class="tools">
       {#if gm}
-        <button onclick={() => gm.addNote(center().x, center().y)} title="Nova nota">📝<span class="hide-sm"> Nota</span></button>
-        <button onclick={() => gm.addCard(center().x, center().y)} title="Nova carta de pista">🃏<span class="hide-sm"> Carta</span></button>
-        <button onclick={() => pickImage()} title="Adicionar imagem (ou arraste/cole no quadro)">🖼️<span class="hide-sm"> Imagem</span></button>
-        <button onclick={bringAll} title="Centraliza a visão de todos os jogadores no que você está vendo">🎯<span class="hide-sm"> Trazer todos</span></button>
-        <button class="primary" onclick={() => (showInvite = true)}>Convidar</button>
+        <div class="group" role="group" aria-label="Adicionar ao quadro">
+          <span class="glabel hide-sm">Pôr no quadro</span>
+          <button onclick={() => gm.addNote(center().x, center().y)} title="Nova nota (só você vê até mostrar no 👁)">📝<span class="hide-sm"> Nota</span></button>
+          <button onclick={() => gm.addCard(center().x, center().y)} title="Nova pista com verso secreto">🃏<span class="hide-sm"> Pista</span></button>
+          <button onclick={() => pickImage()} title="Adicionar imagem ou mapa (também dá para arrastar ou colar no quadro)">🖼️<span class="hide-sm"> Imagem</span></button>
+        </div>
+        <button onclick={bringAll} title="Leva a visão de todos os jogadores para o que você está vendo">🎯<span class="hide-sm"> Chamar todos aqui</span></button>
+        <button class="primary" onclick={() => (showInvite = true)}>✉️ Convidar</button>
       {:else}
         <span class="me hide-sm"><span class="dot" style:background={colorFor(session.myPid)}></span>{session.nameOf(session.myPid)}</span>
       {/if}
-      <button class="ghost" onclick={() => (sidebarOpen = !sidebarOpen)} title="Mostrar/esconder painel" aria-label="Painel lateral">
-        {sidebarOpen ? '⟩' : '⟨'} 💬
+      <button class="ghost" onclick={() => (sidebarOpen = !sidebarOpen)} title={sidebarOpen ? 'Esconder o painel' : 'Mostrar o painel (chat, fichas, combate...)'} aria-label="Painel lateral">
+        {sidebarOpen ? 'Painel ⟩' : '⟨ Painel'}
       </button>
     </div>
   </header>
@@ -263,33 +276,40 @@
       {/if}
       <ToolPalette bind:tool bind:fogBrush {gm} />
       <DiceTray {session} />
-      <div class="zoom">
-        <button onclick={() => renderer?.zoomBy(1.25)} aria-label="Aproximar">＋</button>
-        <button onclick={() => renderer?.zoomBy(0.8)} aria-label="Afastar">－</button>
-        <button onclick={() => renderer?.fitAll()} aria-label="Ver tudo" title="Ver tudo">⛶</button>
-        <button onclick={() => session.undo()} disabled={!session.canUndo} aria-label="Desfazer" title="Desfazer (Ctrl+Z)">↶</button>
+      <div class="zoom wood" role="toolbar" aria-label="Visão e desfazer">
+        <button onclick={() => renderer?.zoomBy(1.25)} aria-label="Aproximar" title="Aproximar (ou roda do mouse)">＋</button>
+        <button onclick={() => renderer?.zoomBy(0.8)} aria-label="Afastar" title="Afastar (ou roda do mouse)">－</button>
+        <button onclick={() => renderer?.fitAll()} aria-label="Ver tudo" title="Enquadrar tudo">⛶</button>
+        <span class="sep"></span>
+        <button onclick={() => session.undo()} disabled={!session.canUndo} aria-label="Desfazer" title={gm ? 'Desfazer (Ctrl+Z)' : 'Desfazer o movimento do seu token (Ctrl+Z)'}>↶</button>
         <button onclick={() => session.redo()} disabled={!session.canRedo} aria-label="Refazer" title="Refazer (Ctrl+Y)">↷</button>
       </div>
       {#if gm && session.itemsVersion >= 0 && session.items.size === 0}
         <div class="empty-hint">
-          <p>Quadro vazio. Arraste imagens para cá, cole com Ctrl+V, ou use <strong>📝 Nota</strong> e <strong>🃏 Carta</strong>.</p>
-          <p class="muted">Botão direito em qualquer item para permissões. Roda do mouse dá zoom; arraste o fundo para mover.</p>
+          <h2>Mesa vazia</h2>
+          <p>Arraste a imagem do mapa para cá (ou cole com Ctrl+V). Depois use <strong>📜 Fichas → 🪙</strong> para pôr os personagens.</p>
+          <p class="muted">Botão direito em qualquer coisa mostra o que dá para fazer. Roda do mouse dá zoom; arraste o fundo para andar.</p>
         </div>
       {/if}
     </div>
 
     {#if sidebarOpen}
       <aside class="side">
-        <nav class="tabs">
-          <button class:on={tab === 'chat'} onclick={() => (tab = 'chat')}>Chat</button>
-          <button class:on={tab === 'sheets'} onclick={() => (tab = 'sheets')}>Fichas</button>
-          <button class:on={tab === 'combat'} onclick={() => (tab = 'combat')}>
-            Combate{#if session.combat.active}<span class="live" title="Combate em andamento"></span>{/if}
-          </button>
-          <button class:on={tab === 'notes'} onclick={() => (tab = 'notes')} title="Diário, wiki e tabelas">Notas</button>
-          <button class:on={tab === 'players'} onclick={() => (tab = 'players')} title="Jogadores">Grupo ({onlineCount})</button>
-          {#if gm}<button class:on={tab === 'settings'} onclick={() => (tab = 'settings')} title="Configurações da mesa">Mesa</button>{/if}
+        <nav class="tabs" aria-label="Painéis">
+          {#each TABS.filter((t) => !t.gmOnly || gm) as t (t.id)}
+            <button class:on={tab === t.id} onclick={() => (tab = t.id)} title={t.help(!!gm)} aria-label={t.name}>
+              <span class="ti">{t.icon}</span>
+              <span class="tn">{t.id === 'players' ? `${t.name} (${onlineCount})` : t.name}</span>
+              {#if t.id === 'combat' && session.combat.active}<span class="live" title="Combate em andamento"></span>{/if}
+            </button>
+          {/each}
         </nav>
+        {#each TABS.filter((t) => t.id === tab) as t (t.id)}
+          <div class="tab-head">
+            <strong>{t.icon} {t.name}</strong>
+            <span>{t.help(!!gm)}</span>
+          </div>
+        {/each}
         <div class="tab-body">
           {#if tab === 'chat'}
             <ChatPanel {session} />
@@ -411,10 +431,32 @@
     align-items: center;
     gap: 10px;
     padding: 6px 10px;
-    background: var(--panel);
-    border-bottom: 1px solid var(--border);
-    min-height: 50px;
+    background: var(--wood);
+    border-bottom: 1px solid #4a3a28;
+    box-shadow: 0 1px 0 rgba(201, 164, 92, 0.25), 0 4px 14px rgba(0, 0, 0, 0.45);
+    min-height: 52px;
     z-index: 5;
+  }
+  .group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 4px 3px 10px;
+    border: 1px solid #4a3a28;
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.18);
+  }
+  .glabel {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-right: 4px;
+  }
+  .group button {
+    background: transparent;
+    border-color: transparent;
+    padding: 5px 9px;
   }
   .brand {
     display: flex;
@@ -439,6 +481,7 @@
     font-size: 17px;
     font-weight: 400;
     color: var(--paper);
+    font-weight: 700;
   }
   .status {
     display: inline-flex;
@@ -475,26 +518,66 @@
   .side {
     width: 360px;
     flex: none;
-    background: var(--panel);
-    border-left: 1px solid var(--border);
+    background: var(--wood-dark);
+    border-left: 1px solid #4a3a28;
+    box-shadow: inset 1px 0 0 rgba(201, 164, 92, 0.15);
     display: flex;
     flex-direction: column;
     min-height: 0;
   }
   .tabs {
     display: flex;
-    border-bottom: 1px solid var(--border);
+    background: var(--wood);
+    border-bottom: 1px solid #4a3a28;
   }
   .tabs button {
-    flex: 1 1 auto;
+    flex: 1 1 0;
+    min-width: 0;
     border: 0;
     border-radius: 0;
     background: transparent;
-    padding: 10px 4px;
+    padding: 7px 2px 6px;
     color: var(--muted);
     border-bottom: 2px solid transparent;
-    font-size: 12px;
+    font-size: 11px;
     white-space: nowrap;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    position: relative;
+  }
+  .ti {
+    font-size: 17px;
+    line-height: 1;
+    filter: grayscale(0.6);
+    opacity: 0.8;
+  }
+  .tn {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+  .tabs button:hover:not(.on) {
+    background: rgba(201, 164, 92, 0.06);
+  }
+  .tab-head {
+    padding: 8px 12px 9px;
+    border-bottom: 1px solid #3b2f22;
+    background: rgba(0, 0, 0, 0.18);
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+  .tab-head strong {
+    font-family: var(--font-title);
+    color: var(--brass);
+    font-size: 15px;
+  }
+  .tab-head span {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.35;
   }
   .live {
     display: inline-block;
@@ -502,12 +585,19 @@
     height: 7px;
     border-radius: 50%;
     background: var(--accent);
-    margin-left: 4px;
-    vertical-align: middle;
+    box-shadow: 0 0 6px var(--accent);
+    position: absolute;
+    top: 6px;
+    right: calc(50% - 16px);
   }
   .tabs button.on {
-    color: var(--text);
-    border-bottom-color: var(--accent);
+    color: var(--brass);
+    border-bottom-color: var(--brass);
+    background: linear-gradient(180deg, transparent, rgba(201, 164, 92, 0.1));
+  }
+  .tabs button.on .ti {
+    filter: none;
+    opacity: 1;
   }
   .tab-body {
     flex: 1;
@@ -519,13 +609,22 @@
     bottom: 12px;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 2px;
+    padding: 4px;
+    border-radius: 10px;
   }
   .zoom button {
-    width: 34px;
-    height: 34px;
+    width: 36px;
+    height: 32px;
     padding: 0;
-    background: rgba(22, 25, 32, 0.9);
+    background: transparent;
+    border-color: transparent;
+    font-size: 16px;
+  }
+  .zoom .sep {
+    height: 1px;
+    margin: 3px 4px;
+    background: #4a3a28;
   }
   .banner {
     position: absolute;
@@ -550,7 +649,15 @@
     pointer-events: none;
     max-width: min(460px, calc(100% - 32px));
     color: var(--text);
-    opacity: 0.8;
+    opacity: 0.85;
+    background: rgba(15, 12, 9, 0.6);
+    border: 1px dashed #5a4630;
+    border-radius: 12px;
+    padding: 18px 22px;
+  }
+  .empty-hint h2 {
+    color: var(--brass);
+    font-size: 20px;
   }
   .toasts {
     position: fixed;
@@ -565,8 +672,8 @@
     width: min(440px, calc(100% - 32px));
   }
   .toast {
-    background: #232833;
-    border: 1px solid var(--border);
+    background: var(--wood);
+    border: 1px solid #5a4630;
     padding: 9px 14px;
     border-radius: 8px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);

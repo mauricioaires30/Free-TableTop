@@ -264,13 +264,13 @@
     border-radius: 50%;
     font-size: 24px;
     padding: 0;
-    background: var(--accent);
-    border-color: var(--accent);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    background: radial-gradient(circle at 35% 30%, #c43a2e, #7a1414 75%);
+    border: 2px solid var(--brass);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), inset 0 -3px 6px rgba(0, 0, 0, 0.35);
     z-index: 4;
   }
   .fab:hover {
-    background: #d24434 !important;
+    background: radial-gradient(circle at 35% 30%, #d4473a, #8a1a17 75%) !important;
   }
   .badge {
     position: absolute;

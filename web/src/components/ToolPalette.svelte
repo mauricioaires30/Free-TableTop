@@ -8,12 +8,13 @@
     gm = null,
   }: { tool: Tool; fogBrush: FogBrush; gm?: GmSession | null } = $props();
 
-  const TOOLS: Array<{ id: Tool; icon: string; label: string; gmOnly?: boolean }> = [
-    { id: 'select', icon: '🖐', label: 'Mover e selecionar (V)' },
-    { id: 'ruler', icon: '📏', label: 'Régua: arraste para medir (R)' },
-    { id: 'ping', icon: '📍', label: 'Ping: clique para chamar atenção (P) · ou Alt+clique' },
-    { id: 'fog', icon: '🌫', label: 'Névoa de guerra (N)', gmOnly: true },
+  const TOOLS: Array<{ id: Tool; icon: string; name: string; label: string; hint: string; gmOnly?: boolean }> = [
+    { id: 'select', icon: '🖐', name: 'Mover', label: 'Mover e selecionar (V)', hint: '' },
+    { id: 'ruler', icon: '📏', name: 'Régua', label: 'Régua: arraste para medir (R)', hint: 'Arraste no quadro para medir a distância. Todos veem.' },
+    { id: 'ping', icon: '📍', name: 'Ping', label: 'Ping: clique para chamar atenção (P) · ou Alt+clique', hint: 'Clique no quadro para chamar a atenção de todos.' },
+    { id: 'fog', icon: '🌫', name: 'Névoa', label: 'Névoa de guerra (N)', hint: 'Arraste para revelar ou esconder partes do mapa.', gmOnly: true },
   ];
+  const active = $derived(TOOLS.find((t) => t.id === tool));
 
   function onKey(e: KeyboardEvent) {
     const t = e.target as HTMLElement;
@@ -27,11 +28,21 @@
 
 <svelte:window onkeydown={onKey} />
 
-<div class="palette" role="toolbar" aria-label="Ferramentas do quadro">
+<div class="palette wood" role="toolbar" aria-label="Ferramentas do quadro">
   {#each TOOLS.filter((t) => !t.gmOnly || gm) as t (t.id)}
-    <button class:on={tool === t.id} title={t.label} aria-label={t.label} aria-pressed={tool === t.id} onclick={() => (tool = t.id)}>{t.icon}</button>
+    <button class:on={tool === t.id} title={t.label} aria-label={t.label} aria-pressed={tool === t.id} onclick={() => (tool = t.id)}>
+      <span class="ic">{t.icon}</span>
+      <span class="nm">{t.name}</span>
+    </button>
   {/each}
 </div>
+
+{#if active?.hint}
+  <div class="tool-hint wood" role="status">
+    <span>{active.icon} <strong>{active.name}:</strong> {active.hint}</span>
+    <button class="ghost" onclick={() => (tool = 'select')}>Esc · sair</button>
+  </div>
+{/if}
 
 {#if tool === 'fog' && gm}
   <div class="fog card">
@@ -70,23 +81,66 @@
     top: 12px;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 2px;
+    padding: 4px;
+    border-radius: 10px;
     z-index: 4;
   }
   .palette button {
-    width: 36px;
-    height: 36px;
+    width: 52px;
+    height: 48px;
     padding: 0;
-    font-size: 17px;
-    background: rgba(22, 25, 32, 0.92);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    background: transparent;
+    border-color: transparent;
+    border-radius: 7px;
+  }
+  .palette .ic {
+    font-size: 18px;
+    line-height: 1;
+  }
+  .palette .nm {
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.02em;
   }
   .palette button.on {
-    border-color: var(--accent-2);
-    box-shadow: 0 0 0 1px var(--accent-2) inset;
+    background: rgba(201, 164, 92, 0.16);
+    border-color: var(--brass);
+  }
+  .palette button.on .nm {
+    color: var(--brass);
+  }
+  .tool-hint {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 8px 6px 14px;
+    border-radius: 999px;
+    font-size: 13px;
+    z-index: 4;
+    max-width: calc(100% - 180px);
+  }
+  .tool-hint strong {
+    color: var(--brass);
+  }
+  .tool-hint button {
+    font-size: 12px;
+    padding: 3px 10px;
+    white-space: nowrap;
+    color: var(--muted);
   }
   .fog {
     position: absolute;
-    left: 58px;
+    left: 76px;
     top: 12px;
     width: 230px;
     padding: 10px;
@@ -94,7 +148,8 @@
     flex-direction: column;
     gap: 8px;
     z-index: 4;
-    background: rgba(22, 25, 32, 0.96);
+    background: var(--wood);
+    border-color: #4a3a28;
   }
   .seg {
     display: flex;

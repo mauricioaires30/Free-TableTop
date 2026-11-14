@@ -1,19 +1,22 @@
 :root {
-  --bg: #0e1014;
-  --panel: #161920;
-  --panel-2: #1d2129;
-  --border: #2a2f3a;
-  --text: #ebe5d8;
-  --muted: #8d93a1;
-  --accent: #c0392b;
-  --accent-2: #d9a75b;
+  --bg: #0f0c09;
+  --panel: #1a1410;
+  --panel-2: #261d16;
+  --border: #3b2f22;
+  --text: #eee3cc;
+  --muted: #a69479;
+  --accent: #a8322a;
+  --accent-2: #d4af6a;
+  --brass: #c9a45c;
+  --wood: linear-gradient(180deg, #2a2017 0%, #1c1611 100%);
+  --wood-dark: linear-gradient(180deg, #1f1812 0%, #15100c 100%);
   --ok: #4caf7a;
   --warn: #e0a43a;
   --danger: #e05252;
   --paper: #efe4cc;
   --radius: 10px;
   --font: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-title: 'Special Elite', 'Courier New', monospace;
+  --font-title: 'Cinzel', 'Special Elite', serif;
   color-scheme: dark;
 }
 
@@ -41,8 +44,9 @@ h1,
 h2,
 h3 {
   font-family: var(--font-title);
-  font-weight: 400;
+  font-weight: 700;
   margin: 0 0 0.5em;
+  letter-spacing: 0.02em;
 }
 
 a {
@@ -66,21 +70,23 @@ button {
   transition: background 0.15s, border-color 0.15s;
 }
 button:hover:not(:disabled) {
-  background: #262b35;
-  border-color: #3a4150;
+  background: #31261c;
+  border-color: #5a4630;
 }
 button:disabled {
   opacity: 0.5;
   cursor: default;
 }
 button.primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+  background: radial-gradient(circle at 35% 25%, #c23b30, #8a1f19 80%);
+  border-color: #6b1512;
+  color: #fbe9d0;
   font-weight: 600;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15);
 }
 button.primary:hover:not(:disabled) {
-  background: #d24434;
+  background: radial-gradient(circle at 35% 25%, #d24a3e, #9c241d 80%);
+  border-color: #7a1915;
 }
 button.ghost {
   background: transparent;
@@ -155,9 +161,9 @@ label {
   padding: 16px;
 }
 .dialog {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  background: var(--wood-dark);
+  border: 1px solid #5a4630;
+  border-radius: 10px;
   padding: 20px;
   width: min(480px, 100%);
   max-height: calc(100vh - 32px);
@@ -252,4 +258,28 @@ label {
 .parchment ::placeholder {
   color: rgba(111, 86, 56, 0.6);
   font-style: italic;
+}
+
+/* ---------- Taverna: moldura de madeira e latão ---------- */
+.wood {
+  background: var(--wood);
+  border: 1px solid #4a3a28;
+  box-shadow: inset 0 1px 0 rgba(255, 230, 180, 0.06), 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+/* Título de seção dos painéis: "~ Título ~" em latão. */
+.side h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px !important;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--brass) !important;
+  margin: 18px 0 8px !important;
+}
+.side h3::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(201, 164, 92, 0.55), transparent);
 }
