@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
   import { tick } from 'svelte';
   import { colorFor, dieLabel, parseDice, type LogEntry } from '@ftt/shared';
   import type { TableSession } from '../lib/session/table.svelte';
@@ -164,7 +165,7 @@
 
 {#if !open}
   <button class="fab" onclick={() => (open = true)} title="Bandeja de dados" aria-label="Abrir bandeja de dados">
-    🎲
+    <Icon name="d20" size={28} stroke={1.5} />
     {#if unseen}<span class="badge">{unseen > 9 ? '9+' : unseen}</span>{/if}
   </button>
 {:else}
@@ -259,18 +260,28 @@
     position: absolute;
     right: 14px;
     bottom: 14px;
-    width: 52px;
-    height: 52px;
-    border-radius: 50%;
-    font-size: 24px;
+    width: 62px;
+    height: 62px;
+    border-radius: 47% 53% 49% 51% / 52% 47% 53% 48%;
+    display: grid;
+    place-items: center;
     padding: 0;
-    background: radial-gradient(circle at 35% 30%, #c43a2e, #7a1414 75%);
-    border: 2px solid var(--brass);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), inset 0 -3px 6px rgba(0, 0, 0, 0.35);
+    color: #f6d9c4;
+    background: radial-gradient(circle at 50% 50%, #b3302a 0 46%, #8f1f1b 52%, #b32f28 58%, #7a1414 100%) !important;
+    border: 0 !important;
+    box-shadow:
+      0 8px 22px rgba(0, 0, 0, 0.6),
+      inset 0 3px 4px rgba(255, 170, 150, 0.35),
+      inset 0 -5px 8px rgba(0, 0, 0, 0.45) !important;
+    transform: rotate(-6deg);
     z-index: 4;
   }
   .fab:hover {
-    background: radial-gradient(circle at 35% 30%, #d4473a, #8a1a17 75%) !important;
+    transform: rotate(-6deg) scale(1.06);
+    filter: brightness(1.1);
+  }
+  .fab :global(.ico) {
+    filter: drop-shadow(0 -1px 0 rgba(0, 0, 0, 0.5)) drop-shadow(0 1px 0 rgba(255, 190, 170, 0.4));
   }
   .badge {
     position: absolute;

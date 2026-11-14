@@ -130,7 +130,7 @@
   .board {
     position: absolute;
     inset: 0;
-    background-color: #15110d;
+    background-color: transparent;
     background-image:
       linear-gradient(rgba(212, 175, 106, 0.035) 1px, transparent 1px),
       linear-gradient(90deg, rgba(212, 175, 106, 0.035) 1px, transparent 1px),

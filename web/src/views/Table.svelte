@@ -21,6 +21,7 @@
   import NotesPanel from '../components/NotesPanel.svelte';
   import NoteWindow from '../components/NoteWindow.svelte';
   import DiceTray from '../components/DiceTray.svelte';
+  import Icon, { type IconName } from '../components/Icon.svelte';
 
   let { session, gm = null, onLeave }: { session: TableSession; gm?: GmSession | null; onLeave?: () => void } = $props();
 
@@ -38,13 +39,13 @@
   let tab = $state<Tab>('chat');
 
   /** Abas do painel, com uma frase explicando o que tem em cada uma. */
-  const TABS: Array<{ id: Tab; icon: string; name: string; gmOnly?: boolean; help: (gm: boolean) => string }> = [
-    { id: 'chat', icon: '💬', name: 'Chat', help: () => 'Conversa da mesa. /w nome para sussurrar; os dados ficam na bandeja 🎲.' },
-    { id: 'sheets', icon: '📜', name: 'Fichas', help: (g) => (g ? 'Personagens, NPCs e inimigos. 🪙 põe no mapa, 🔐 libera para alguém.' : 'Sua ficha. Clique num atributo para rolar.') },
-    { id: 'combat', icon: '⚔️', name: 'Combate', help: (g) => (g ? 'Ordem de iniciativa, turnos e vida. Botão direito num token: entrar no combate.' : 'Ordem dos turnos. Role sua iniciativa aqui.') },
-    { id: 'notes', icon: '📖', name: 'Notas', help: (g) => (g ? 'Diário das sessões, wiki da campanha e tabelas aleatórias.' : 'Páginas e tabelas que o mestre liberou.') },
-    { id: 'players', icon: '👥', name: 'Grupo', help: (g) => (g ? 'Quem está na mesa: silenciar, expulsar e convidar.' : 'Quem está na mesa.') },
-    { id: 'settings', icon: '⚙️', name: 'Mesa', gmOnly: true, help: () => 'Convite, mapa, atributos, combate, fichas e filtro.' },
+  const TABS: Array<{ id: Tab; icon: IconName; name: string; gmOnly?: boolean; help: (gm: boolean) => string }> = [
+    { id: 'chat', icon: 'chat', name: 'Chat', help: () => 'Conversa da mesa. /w nome para sussurrar; os dados ficam na bandeja 🎲.' },
+    { id: 'sheets', icon: 'scroll', name: 'Fichas', help: (g) => (g ? 'Personagens, NPCs e inimigos. A moeda põe o token no mapa; o cadeado libera a ficha para alguém.' : 'Sua ficha. Clique num atributo para rolar.') },
+    { id: 'combat', icon: 'swords', name: 'Combate', help: (g) => (g ? 'Ordem de iniciativa, turnos e vida. Botão direito num token: entrar no combate.' : 'Ordem dos turnos. Role sua iniciativa aqui.') },
+    { id: 'notes', icon: 'book', name: 'Notas', help: (g) => (g ? 'Diário das sessões, wiki da campanha e tabelas aleatórias.' : 'Páginas e tabelas que o mestre liberou.') },
+    { id: 'players', icon: 'group', name: 'Grupo', help: (g) => (g ? 'Quem está na mesa: silenciar, expulsar e convidar.' : 'Quem está na mesa.') },
+    { id: 'settings', icon: 'gear', name: 'Mesa', gmOnly: true, help: () => 'Convite, mapa, atributos, combate, fichas e filtro.' },
   ];
   let showTemplates = $state(false);
   let permSheet = $state<string | null>(null);
@@ -224,13 +225,13 @@
 </script>
 
 <div class="table">
-  <header class="top">
+  <header class="top wood">
     <button class="ghost brand" onclick={leave} title="Sair para o início">
       <img src="{import.meta.env.BASE_URL}favicon.svg" alt="" width="26" height="26" />
       <span class="hide-sm">Free TableTop</span>
     </button>
     <div class="title">
-      <strong>{session.campaignName || 'Mesa'}</strong>
+      <strong class="banner-name">{session.campaignName || 'Mesa'}</strong>
       <span class="status"><span class="dot" style:background={statusColor}></span>{statusLabel}</span>
       {#if gm}
         <span class="status muted hide-sm">
@@ -243,17 +244,17 @@
       {#if gm}
         <div class="group" role="group" aria-label="Adicionar ao quadro">
           <span class="glabel hide-sm">Pôr no quadro</span>
-          <button onclick={() => gm.addNote(center().x, center().y)} title="Nova nota (só você vê até mostrar no 👁)">📝<span class="hide-sm"> Nota</span></button>
-          <button onclick={() => gm.addCard(center().x, center().y)} title="Nova pista com verso secreto">🃏<span class="hide-sm"> Pista</span></button>
-          <button onclick={() => pickImage()} title="Adicionar imagem ou mapa (também dá para arrastar ou colar no quadro)">🖼️<span class="hide-sm"> Imagem</span></button>
+          <button onclick={() => gm.addNote(center().x, center().y)} title="Nova nota (só você vê até mostrar no olho)"><Icon name="note" size={17} /><span class="hide-sm">Nota</span></button>
+          <button onclick={() => gm.addCard(center().x, center().y)} title="Nova pista com verso secreto"><Icon name="clue" size={17} /><span class="hide-sm">Pista</span></button>
+          <button onclick={() => pickImage()} title="Adicionar imagem ou mapa (também dá para arrastar ou colar no quadro)"><Icon name="image" size={17} /><span class="hide-sm">Imagem</span></button>
         </div>
-        <button onclick={bringAll} title="Leva a visão de todos os jogadores para o que você está vendo">🎯<span class="hide-sm"> Chamar todos aqui</span></button>
-        <button class="primary" onclick={() => (showInvite = true)}>✉️ Convidar</button>
+        <button class="ib" onclick={bringAll} title="Leva a visão de todos os jogadores para o que você está vendo"><Icon name="target" size={17} /><span class="hide-sm">Chamar todos aqui</span></button>
+        <button class="primary ib" onclick={() => (showInvite = true)}><Icon name="seal" size={17} />Convidar</button>
       {:else}
         <span class="me hide-sm"><span class="dot" style:background={colorFor(session.myPid)}></span>{session.nameOf(session.myPid)}</span>
       {/if}
-      <button class="ghost" onclick={() => (sidebarOpen = !sidebarOpen)} title={sidebarOpen ? 'Esconder o painel' : 'Mostrar o painel (chat, fichas, combate...)'} aria-label="Painel lateral">
-        {sidebarOpen ? 'Painel ⟩' : '⟨ Painel'}
+      <button class="ghost ib" onclick={() => (sidebarOpen = !sidebarOpen)} title={sidebarOpen ? 'Esconder o painel' : 'Mostrar o painel (chat, fichas, combate...)'} aria-label="Painel lateral">
+        <Icon name="panel" size={18} /><span class="hide-sm">{sidebarOpen ? 'Fechar painel' : 'Painel'}</span>
       </button>
     </div>
   </header>
@@ -276,29 +277,29 @@
       {/if}
       <ToolPalette bind:tool bind:fogBrush {gm} />
       <DiceTray {session} />
-      <div class="zoom wood" role="toolbar" aria-label="Visão e desfazer">
-        <button onclick={() => renderer?.zoomBy(1.25)} aria-label="Aproximar" title="Aproximar (ou roda do mouse)">＋</button>
-        <button onclick={() => renderer?.zoomBy(0.8)} aria-label="Afastar" title="Afastar (ou roda do mouse)">－</button>
-        <button onclick={() => renderer?.fitAll()} aria-label="Ver tudo" title="Enquadrar tudo">⛶</button>
+      <div class="zoom wood frame" role="toolbar" aria-label="Visão e desfazer">
+        <button class="ghost" onclick={() => renderer?.zoomBy(1.25)} aria-label="Aproximar" title="Aproximar (ou roda do mouse)"><Icon name="plus" /></button>
+        <button class="ghost" onclick={() => renderer?.zoomBy(0.8)} aria-label="Afastar" title="Afastar (ou roda do mouse)"><Icon name="minus" /></button>
+        <button class="ghost" onclick={() => renderer?.fitAll()} aria-label="Ver tudo" title="Enquadrar tudo"><Icon name="fit" /></button>
         <span class="sep"></span>
-        <button onclick={() => session.undo()} disabled={!session.canUndo} aria-label="Desfazer" title={gm ? 'Desfazer (Ctrl+Z)' : 'Desfazer o movimento do seu token (Ctrl+Z)'}>↶</button>
-        <button onclick={() => session.redo()} disabled={!session.canRedo} aria-label="Refazer" title="Refazer (Ctrl+Y)">↷</button>
+        <button class="ghost" onclick={() => session.undo()} disabled={!session.canUndo} aria-label="Desfazer" title={gm ? 'Desfazer (Ctrl+Z)' : 'Desfazer o movimento do seu token (Ctrl+Z)'}><Icon name="undo" /></button>
+        <button class="ghost" onclick={() => session.redo()} disabled={!session.canRedo} aria-label="Refazer" title="Refazer (Ctrl+Y)"><Icon name="redo" /></button>
       </div>
       {#if gm && session.itemsVersion >= 0 && session.items.size === 0}
-        <div class="empty-hint">
+        <div class="empty-hint parchment">
           <h2>Mesa vazia</h2>
-          <p>Arraste a imagem do mapa para cá (ou cole com Ctrl+V). Depois use <strong>📜 Fichas → 🪙</strong> para pôr os personagens.</p>
+          <p>Arraste a imagem do mapa para cá (ou cole com Ctrl+V). Depois use a moeda na aba <strong>Fichas</strong> para pôr os personagens.</p>
           <p class="muted">Botão direito em qualquer coisa mostra o que dá para fazer. Roda do mouse dá zoom; arraste o fundo para andar.</p>
         </div>
       {/if}
     </div>
 
     {#if sidebarOpen}
-      <aside class="side">
-        <nav class="tabs" aria-label="Painéis">
+      <aside class="side leather">
+        <nav class="tabs wood" aria-label="Painéis">
           {#each TABS.filter((t) => !t.gmOnly || gm) as t (t.id)}
             <button class:on={tab === t.id} onclick={() => (tab = t.id)} title={t.help(!!gm)} aria-label={t.name}>
-              <span class="ti">{t.icon}</span>
+              <span class="ti"><Icon name={t.icon} size={19} /></span>
               <span class="tn">{t.id === 'players' ? `${t.name} (${onlineCount})` : t.name}</span>
               {#if t.id === 'combat' && session.combat.active}<span class="live" title="Combate em andamento"></span>{/if}
             </button>
@@ -306,7 +307,7 @@
         </nav>
         {#each TABS.filter((t) => t.id === tab) as t (t.id)}
           <div class="tab-head">
-            <strong>{t.icon} {t.name}</strong>
+            <strong>{t.name}</strong>
             <span>{t.help(!!gm)}</span>
           </div>
         {/each}
@@ -414,7 +415,7 @@
 
   <div class="toasts" aria-live="polite">
     {#each session.toasts as t (t.id)}
-      <div class="toast" class:error={t.kind === 'error'}>{t.text}</div>
+      <div class="toast parchment" class:error={t.kind === 'error'}>{t.text}</div>
     {/each}
   </div>
 </div>
@@ -684,6 +685,180 @@
     color: #ffc2c2;
   }
 
+  /* ===== arte ===== */
+  .top {
+    position: relative;
+    border-bottom: 0 !important;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.55) !important;
+  }
+  /* trilho de latão com pregos embaixo da barra */
+  .top::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -5px;
+    height: 6px;
+    background: var(--nails) 0 50% / 90px 6px repeat-x, var(--metal);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
+    pointer-events: none;
+  }
+  .brand {
+    font-family: var(--font-deco) !important;
+    color: var(--brass);
+    text-shadow: 0 1px 0 #000, 0 0 10px rgba(201, 164, 92, 0.25);
+  }
+  /* nome da campanha numa faixa de pergaminho */
+  .banner-name {
+    color: #3a2410 !important;
+    font-family: var(--font-deco) !important;
+    font-size: 15px !important;
+    text-shadow: none;
+    padding: 4px 22px 5px;
+    background: #e8d4a6 var(--tex-leather);
+    background-image: radial-gradient(ellipse at 50% 40%, #f4e6c3, #dcc08a);
+    clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 50%, 100% 100%, 0 100%, 10px 50%);
+    filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.6));
+    max-width: 280px;
+    min-width: 120px;
+  }
+  .title {
+    overflow: hidden;
+  }
+  .ib,
+  .group button {
+    display: inline-flex !important;
+    align-items: center;
+    gap: 6px;
+  }
+  .group {
+    background: rgba(0, 0, 0, 0.28) !important;
+    border: 1px solid #120c07 !important;
+    box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.6), 0 1px 0 rgba(255, 222, 160, 0.1);
+  }
+  .glabel {
+    font-family: var(--font-fell);
+    text-transform: none !important;
+    font-size: 13px !important;
+    color: var(--brass) !important;
+  }
+  .side {
+    position: relative;
+    border-left: 0 !important;
+    box-shadow: inset 4px 0 8px rgba(0, 0, 0, 0.5), -2px 0 0 #120c07, -4px 0 0 #6d4f22 !important;
+  }
+  /* costura do couro */
+  .side::after {
+    content: '';
+    position: absolute;
+    inset: 82px 6px 6px 6px;
+    border: 1.5px dashed rgba(201, 164, 92, 0.22);
+    border-radius: 6px;
+    pointer-events: none;
+  }
+  .tabs {
+    border-bottom: 0 !important;
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.5);
+    padding: 4px 4px 0;
+    gap: 2px;
+  }
+  .tabs button {
+    font-family: var(--font-fell);
+    font-size: 12px !important;
+    border-radius: 6px 6px 0 0 !important;
+    border-bottom: 0 !important;
+    box-shadow: none !important;
+    background: transparent !important;
+    color: #bda57d !important;
+  }
+  .tabs button:hover:not(.on) {
+    color: #f0dcae !important;
+    background: rgba(0, 0, 0, 0.2) !important;
+  }
+  /* aba ativa: placa de latão gravada */
+  .tabs button.on {
+    background: var(--metal) !important;
+    color: #2b1a08 !important;
+    text-shadow: 0 1px 0 rgba(255, 240, 200, 0.6) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 -1px 4px rgba(0, 0, 0, 0.5) !important;
+  }
+  .tabs button.on .ti :global(.ico) {
+    filter: drop-shadow(0 1px 0 rgba(255, 240, 200, 0.6));
+  }
+  .ti {
+    filter: none !important;
+    opacity: 1 !important;
+  }
+  /* cabeçalho do painel: etiqueta de pergaminho */
+  .tab-head {
+    margin: 10px 12px 2px;
+    padding: 7px 26px 8px 14px !important;
+    border: 0 !important;
+    background: radial-gradient(ellipse at 40% 40%, #f4e6c3, #dcc08a) !important;
+    clip-path: polygon(0 0, 100% 0, calc(100% - 12px) 50%, 100% 100%, 0 100%);
+    filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.6));
+  }
+  .tab-head strong {
+    font-family: var(--font-deco) !important;
+    color: #5a1f0c !important;
+    font-size: 15px !important;
+  }
+  .tab-head span {
+    color: #4a3519 !important;
+    font-family: 'Crimson Pro', Georgia, serif;
+    font-size: 13.5px !important;
+  }
+  .tab-body {
+    position: relative;
+    z-index: 1;
+  }
+  /* mesa de madeira (o quadro fica por cima) */
+  .board-wrap {
+    background-color: #1a120b;
+    background-image:
+      radial-gradient(ellipse at 50% 45%, transparent 35%, rgba(0, 0, 0, 0.75) 100%),
+      repeating-linear-gradient(0deg, transparent 0 158px, rgba(0, 0, 0, 0.55) 158px 160px, rgba(255, 220, 160, 0.04) 160px 161px),
+      var(--tex-wood),
+      linear-gradient(180deg, #2b1d12, #22170e);
+    background-size: 100% 100%, 100% 100%, 600px 220px, 100% 100%;
+  }
+  .zoom {
+    padding: 2px !important;
+    border-radius: 0 !important;
+  }
+  .zoom button {
+    color: #e6cf9c;
+  }
+  .zoom .sep {
+    background: linear-gradient(90deg, transparent, #c9a45c, transparent) !important;
+  }
+  .empty-hint {
+    opacity: 1 !important;
+    border: 0 !important;
+    border-radius: 3px !important;
+    padding: 22px 26px !important;
+    color: var(--ink);
+  }
+  .empty-hint h2 {
+    font-family: var(--font-deco);
+    color: #5a1f0c !important;
+  }
+  .toast {
+    border-radius: 3px !important;
+    color: var(--ink) !important;
+    font-family: 'Crimson Pro', Georgia, serif;
+    font-size: 15px;
+  }
+  .toast.error {
+    color: #8b1e1e !important;
+    font-weight: 600;
+  }
+  @media (max-width: 1360px) {
+    .glabel,
+    .title .status.muted {
+      display: none;
+    }
+  }
   @media (max-width: 760px) {
     .hide-sm {
       display: none;
@@ -693,7 +868,8 @@
       inset: 0 0 0 auto;
       width: min(360px, 100%);
       z-index: 6;
-      box-shadow: -10px 0 30px rgba(0, 0, 0, 0.4);
+      box-shadow: -10px 0 30px rgba(0, 0, 0, 0.4) !important;
+      position: absolute !important;
     }
     .tools {
       gap: 4px;

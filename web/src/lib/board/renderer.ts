@@ -712,6 +712,8 @@ export class BoardRenderer {
       }));
     }
     g.add(new Konva.Circle({ x: r, y: r, radius: r - ringW / 2, stroke: ring, strokeWidth: ringW }));
+    // Aro de latão por fora, como uma moeda.
+    g.add(new Konva.Circle({ x: r, y: r, radius: r + 1, stroke: '#c9a45c', strokeWidth: Math.max(1.5, r * 0.04), opacity: 0.9 }));
 
     // HUD do token (no centro, sempre na horizontal): vida em cima, nome e condições embaixo.
     const hp = this.tokenHp(item);

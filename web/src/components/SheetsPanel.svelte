@@ -3,6 +3,7 @@
   import type { TableSession } from '../lib/session/table.svelte';
   import type { GmSession } from '../lib/session/gm.svelte';
   import Avatar from './Avatar.svelte';
+  import Icon from './Icon.svelte';
 
   let {
     session,
@@ -95,10 +96,10 @@
       {/if}
     </button>
     {#if gm}
-      <button class="ghost small" title="Colocar token no mapa" onclick={() => onPlace(s.id)}>🪙</button>
-      <button class="ghost small" title="Permissões" onclick={() => onPerm(s.id)}>🔐</button>
-      <button class="ghost small" title="Duplicar" onclick={() => gm.duplicateSheet(s.id)}>📄</button>
-      <button class="ghost small danger" title="Apagar" onclick={() => remove(s)}>🗑</button>
+      <button class="ghost small" title={s.kind === 'monster' ? 'Pôr mais um token no mapa' : 'Pôr o token no mapa'} aria-label="Pôr no mapa" onclick={() => onPlace(s.id)}><Icon name="coin" size={17} /></button>
+      <button class="ghost small" title="Quem vê e edita" aria-label="Permissões" onclick={() => onPerm(s.id)}><Icon name="lock" size={17} /></button>
+      <button class="ghost small" title="Duplicar" aria-label="Duplicar" onclick={() => gm.duplicateSheet(s.id)}><Icon name="copy" size={17} /></button>
+      <button class="ghost small danger" title="Apagar" aria-label="Apagar" onclick={() => remove(s)}><Icon name="trash" size={17} /></button>
     {/if}
   </li>
 {/snippet}

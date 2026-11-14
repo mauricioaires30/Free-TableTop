@@ -208,6 +208,7 @@ label {
 .parchment textarea,
 .parchment select {
   background: transparent;
+  box-shadow: none;
   border: 0;
   border-bottom: 1px solid rgba(96, 64, 28, 0.45);
   border-radius: 2px;
@@ -229,6 +230,8 @@ label {
   opacity: 1;
 }
 .parchment button {
+  box-shadow: none;
+  text-shadow: none;
   background: rgba(122, 84, 38, 0.1);
   border-color: rgba(96, 64, 28, 0.4);
   color: var(--ink);
@@ -282,4 +285,134 @@ label {
   flex: 1;
   height: 1px;
   background: linear-gradient(90deg, rgba(201, 164, 92, 0.55), transparent);
+}
+
+/* ===================== Arte: madeira, couro, latão ===================== */
+:root {
+  --tex-wood: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='600' height='220'> <filter id='g' x='0' y='0' width='100%' height='100%'><feTurbulence type='fractalNoise' baseFrequency='0.0032 0.13' numOctaves='4' seed='11' stitchTiles='stitch'/> <feColorMatrix values='0 0 0 0 0.06 0 0 0 0 0.035 0 0 0 0 0.015 2.2 0 0 0 -0.85'/></filter> <rect width='100%' height='100%' filter='url(%23g)'/></svg>");
+  --tex-leather: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='260' height='260'> <filter id='l' x='0' y='0' width='100%' height='100%'><feTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='2' seed='4' stitchTiles='stitch'/> <feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1.4 0 0 0 -0.55'/></filter> <filter id='m' x='0' y='0' width='100%' height='100%'><feTurbulence type='fractalNoise' baseFrequency='0.018' numOctaves='3' seed='9' stitchTiles='stitch'/> <feColorMatrix values='0 0 0 0 0.3 0 0 0 0 0.19 0 0 0 0 0.09 0.9 0 0 0 -0.42'/></filter> <rect width='100%' height='100%' filter='url(%23m)'/><rect width='100%' height='100%' filter='url(%23l)'/></svg>");
+  --frame: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='96' height='96' viewBox='0 0 96 96'> <defs><linearGradient id='b' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%23f6dfa4'/><stop offset='.45' stop-color='%23bf9246'/><stop offset='1' stop-color='%236a4919'/></linearGradient> <radialGradient id='r' cx='.4' cy='.35' r='.7'><stop offset='0' stop-color='%23fff1c8'/><stop offset='.5' stop-color='%23c39a4c'/><stop offset='1' stop-color='%234d3410'/></radialGradient> <g id='c'> <path d='M2.5 30V11Q2.5 2.5 11 2.5H30' stroke='url(%23b)' stroke-width='3' fill='none'/> <path d='M8 30V14Q8 8 14 8H30' stroke='%237c5a27' stroke-width='1' fill='none'/> <path d='M0 0H19Q12 3 10 10Q3 12 0 19Z' fill='url(%23b)' stroke='%234d3410' stroke-width='.8'/> <path d='M19 2.5q3 7-4 9.5q-5 1.4-4.2-3' stroke='url(%23b)' stroke-width='1.5' fill='none'/> <path d='M2.5 19q7 3 9.5-4q1.4-5-3-4.2' stroke='url(%23b)' stroke-width='1.5' fill='none'/> <circle cx='5.5' cy='5.5' r='2.4' fill='url(%23r)' stroke='%233a270c' stroke-width='.6'/></g></defs> <path d='M30 2.5H66M30 93.5H66M2.5 30V66M93.5 30V66' stroke='url(%23b)' stroke-width='3'/> <path d='M30 8H66M30 88H66M8 30V66M88 30V66' stroke='%237c5a27' stroke-width='1'/> <use href='%23c'/><use href='%23c' transform='matrix(-1 0 0 1 96 0)'/><use href='%23c' transform='matrix(1 0 0 -1 0 96)'/><use href='%23c' transform='matrix(-1 0 0 -1 96 96)'/></svg>");
+  --flourish: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='12' viewBox='0 0 200 12' preserveAspectRatio='xMaxYMid slice'> <path d='M0 6H178' stroke='%23c9a45c' stroke-opacity='.55' stroke-width='1'/> <path d='M178 6q6-6 11-1q2 3-1 4' stroke='%23c9a45c' stroke-width='1.2' fill='none'/> <path d='M194 2l4 4-4 4-4-4z' fill='%23c9a45c'/></svg>");
+  --nails: radial-gradient(circle at 50% 45%, #f4dda0 0 1px, #a77b35 1.6px, #3b2810 2.6px, transparent 3.2px);
+  --metal: linear-gradient(180deg, #f3d995 0%, #d2a654 38%, #8f6526 52%, #b98c40 70%, #e2bf72 100%);
+  --font-deco: 'Cinzel Decorative', 'Cinzel', serif;
+  --font-fell: 'IM Fell English SC', 'Cinzel', serif;
+}
+
+/* Madeira entalhada (barras, paletas) */
+.wood,
+.carved {
+  background-color: #2a1e14;
+  background-image: var(--tex-wood), linear-gradient(180deg, #3a2a1c 0%, #2a1e14 55%, #1d150e 100%);
+  background-size: 600px 220px, 100% 100%;
+}
+/* Moldura de latão com cantos ornamentados */
+.frame {
+  border-style: solid !important;
+  border-color: transparent !important;
+  border-width: 9px !important;
+  border-image: var(--frame) 30 / 22px stretch !important;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.6) !important;
+}
+/* Couro costurado */
+.leather {
+  background-color: #241a12;
+  background-image: var(--tex-leather), radial-gradient(ellipse at 50% 30%, #33251a 0%, #22180f 70%, #170f09 100%);
+  background-size: 260px 260px, 100% 100%;
+}
+
+/* Botões de madeira entalhada (fora do pergaminho) */
+button {
+  background-color: #33261a;
+  background-image: var(--tex-wood), linear-gradient(180deg, #46331f, #2c2015);
+  background-size: 600px 220px, 100% 100%;
+  border: 1px solid #120c07;
+  color: #efdfbb;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.8);
+  box-shadow: inset 0 1px 0 rgba(255, 222, 160, 0.16), inset 0 -2px 0 rgba(0, 0, 0, 0.35), 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+button:hover:not(:disabled) {
+  background-color: #3e2e1f;
+  background-image: var(--tex-wood), linear-gradient(180deg, #55402a, #34261a);
+  border-color: #1a110a;
+  color: #fff3d6;
+}
+button:active:not(:disabled) {
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.6);
+}
+button.ghost {
+  background: transparent;
+  box-shadow: none;
+  border-color: transparent;
+}
+button.ghost:hover:not(:disabled) {
+  background: rgba(201, 164, 92, 0.12);
+  box-shadow: none;
+}
+input[type='text'],
+input:not([type]),
+input[type='number'],
+textarea,
+select {
+  background-color: rgba(10, 6, 3, 0.45);
+  border: 1px solid #120c07;
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.6), 0 1px 0 rgba(255, 222, 160, 0.08);
+}
+.card {
+  background-color: rgba(10, 6, 3, 0.3);
+  border: 1px solid #3f3020;
+  box-shadow: inset 0 1px 0 rgba(255, 222, 160, 0.06);
+}
+
+/* Títulos de seção com floreio */
+.side h3 {
+  font-family: var(--font-fell) !important;
+  font-size: 14px !important;
+  letter-spacing: 0.08em !important;
+  text-transform: none !important;
+}
+.side h3::after {
+  height: 12px !important;
+  background: var(--flourish) right center / auto 12px no-repeat !important;
+  transform: scaleX(-1);
+}
+.side h3::before {
+  content: '';
+  flex: 0 0 18px;
+  height: 12px;
+  background: var(--flourish) right center / auto 12px no-repeat;
+}
+
+/* Diálogos e menus: couro com moldura de latão */
+.dialog {
+  background-color: #241a12 !important;
+  background-image: var(--tex-leather), radial-gradient(ellipse at 50% 30%, #33251a 0%, #1c140d 100%) !important;
+  background-size: 260px 260px, 100% 100% !important;
+  border-style: solid !important;
+  border-color: transparent !important;
+  border-width: 9px !important;
+  border-image: var(--frame) 30 / 22px stretch !important;
+  padding: 26px !important;
+}
+.dialog h2 {
+  font-family: var(--font-deco);
+  color: var(--brass);
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.6);
+}
+
+/* Dentro do pergaminho, nada de madeira ou couro. */
+.parchment input[type='text'],
+.parchment input:not([type]),
+.parchment input[type='number'],
+.parchment textarea,
+.parchment select {
+  background-color: transparent;
+  box-shadow: none;
+  border: 0;
+  border-bottom: 1px solid rgba(96, 64, 28, 0.45);
+}
+.parchment .card {
+  background-color: rgba(255, 250, 232, 0.3);
+  border-color: rgba(96, 64, 28, 0.38);
+  box-shadow: none;
 }
