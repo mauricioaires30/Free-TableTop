@@ -69,6 +69,22 @@ export function rotateAroundCenter(
   return { x: cx - o2.x, y: cy - o2.y, rotation };
 }
 
+/** Centro do item no quadro (x/y guardados são o canto de cima, já girado). */
+export function centerOf(item: Pick<BoardItem, 'x' | 'y' | 'w' | 'h' | 'rotation'>): { x: number; y: number } {
+  const a = ((item.rotation || 0) * Math.PI) / 180;
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  return { x: item.x + (item.w / 2) * c - (item.h / 2) * s, y: item.y + (item.w / 2) * s + (item.h / 2) * c };
+}
+
+/** Caminho inverso: posição guardada (canto) a partir do centro, tamanho e giro. */
+export function fromCenter(cx: number, cy: number, w: number, h: number, rotation: number): { x: number; y: number } {
+  const a = ((rotation || 0) * Math.PI) / 180;
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  return { x: cx - ((w / 2) * c - (h / 2) * s), y: cy - ((w / 2) * s + (h / 2) * c) };
+}
+
 /** Jogadores só mexem no próprio token (o resto do quadro é só do mestre). */
 export function playerOwnsItem(pid: string, item: Pick<BoardItem, 'type' | 'perm'>): boolean {
   return item.type === 'token' && item.perm.owner === pid;

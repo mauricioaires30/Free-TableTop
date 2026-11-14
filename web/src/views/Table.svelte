@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { colorFor, isHiddenFromPlayers, LAYER_LABELS, LAYERS, layerOf, type BoardItem } from '@ftt/shared';
+  import { centerOf, colorFor, isHiddenFromPlayers, LAYER_LABELS, LAYERS, layerOf, type BoardItem } from '@ftt/shared';
   import type { TableSession } from '../lib/session/table.svelte';
   import type { GmSession } from '../lib/session/gm.svelte';
   import type { BoardRenderer, FogBrush, Tool } from '../lib/board/renderer';
@@ -97,7 +97,8 @@
     if (!r) return;
     if (r.existing) {
       // PJ/NPC já tem token: leva a visão até ele em vez de duplicar.
-      renderer?.focus(r.item.x + r.item.w / 2, r.item.y + r.item.h / 2, Math.max(1, c.scale));
+      const ctr = centerOf(r.item);
+      renderer?.focus(ctr.x, ctr.y, Math.max(1, c.scale));
       renderer?.select(r.item.id);
       gm?.toast('Esse personagem já está no mapa.');
     }

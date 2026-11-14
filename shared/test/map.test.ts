@@ -85,3 +85,23 @@ describe('névoa bloqueia clique', () => {
     expect(fogCovers(fog, 50, 50)).toBe(true);
   });
 });
+
+describe('giro pelo centro', async () => {
+  const { centerOf, fromCenter, rotateAroundCenter } = await import('../src/board');
+  it('centro e volta batem para qualquer giro', () => {
+    for (const rot of [0, 15, 90, 137, 270]) {
+      const it0 = { x: 10, y: 20, w: 70, h: 40, rotation: rot };
+      const c = centerOf(it0);
+      const back = fromCenter(c.x, c.y, 70, 40, rot);
+      expect(back.x).toBeCloseTo(10);
+      expect(back.y).toBeCloseTo(20);
+    }
+  });
+  it('girar mantém o centro no lugar', () => {
+    const it0 = { x: 0, y: 0, w: 70, h: 70, rotation: 0 };
+    const r = rotateAroundCenter(it0, 45);
+    const c = centerOf({ ...it0, ...r });
+    expect(c.x).toBeCloseTo(35);
+    expect(c.y).toBeCloseTo(35);
+  });
+});

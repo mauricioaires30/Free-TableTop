@@ -2,7 +2,7 @@
 // seleção, pan/zoom, régua, pings e cursores dos jogadores.
 import Konva from 'konva';
 import {
-  colorFor, drawOrder, fogCovers, formatDistance, gridDistance, hexCenter, hpOf, isHiddenFromPlayers, layerOf, rotateAroundCenter, snapToGrid,
+  colorFor, drawOrder, fogCovers, formatDistance, gridDistance, hexCenter, hpOf, isHiddenFromPlayers, layerOf, snapToGrid, centerOf, fromCenter,
   TRANSFORM_FIELDS, type BoardItem, type FogShape, type TransformPatch,
 } from '@ftt/shared';
 import type { TableSession } from '../session/table.svelte';
@@ -423,7 +423,8 @@ export class BoardRenderer {
   /** Jogador não pode nem clicar no que está embaixo da névoa (o mestre vê e mexe normalmente). */
   private blockedByFog(item: BoardItem): boolean {
     if (this.s.role === 'gm') return false;
-    return fogCovers(this.s.map.fog, item.x + item.w / 2, item.y + item.h / 2);
+    const c = centerOf(item);
+    return fogCovers(this.s.map.fog, c.x, c.y);
   }
 
   sync() {
@@ -501,15 +502,19 @@ export class BoardRenderer {
       this.dragging = id;
       this.select(id);
     });
-    g.on('dragmove', () => this.sendTransform(id, { x: g.x(), y: g.y() }, false));
+    g.on('dragmove', () => this.sendTransform(id, this.modelOf(g), false));
     g.on('dragend', () => {
       this.dragging = null;
       const item = this.s.items.get(id);
       const grid = this.s.map.grid;
       if (item && grid.enabled && grid.snap && layerOf(item) === 'tokens') {
-        g.position(snapToGrid(g.x(), g.y(), g.width(), g.height(), grid));
+        // Encaixa pelo centro (o nó gira em volta do próprio centro), mesmo girado.
+        const w = g.width();
+        const h = g.height();
+        const p = snapToGrid(g.x() - w / 2, g.y() - h / 2, w, h, grid);
+        g.position({ x: p.x + w / 2, y: p.y + h / 2 });
       }
-      this.sendTransform(id, { x: g.x(), y: g.y() }, true);
+      this.sendTransform(id, this.modelOf(g), true);
     });
     g.on('transformstart', () => (this.transforming = id));
     g.on('transform', () => {
@@ -520,28 +525,38 @@ export class BoardRenderer {
       const h = Math.max(min.h, g.height() * g.scaleY());
       g.scale({ x: 1, y: 1 });
       this.build(g, item, w, h);
-      this.sendTransform(id, { x: g.x(), y: g.y(), w, h, rotation: g.rotation() }, false);
+      this.sendTransform(id, this.modelOf(g), false);
     });
     g.on('transformend', () => {
       this.transforming = null;
-      this.sendTransform(id, { x: g.x(), y: g.y(), w: g.width(), h: g.height(), rotation: g.rotation() }, true);
+      this.sendTransform(id, this.modelOf(g), true);
     });
     return g;
   }
 
+  /**
+   * No quadro cada nó fica no centro do item (offset = metade do tamanho), então
+   * girar e redimensionar acontece em volta do próprio eixo. Aqui volta para o
+   * formato guardado (canto de cima, já girado).
+   */
+  private modelOf(g: Konva.Group): Partial<BoardItem> {
+    const w = g.width();
+    const h = g.height();
+    const rotation = (((g.rotation() % 360) + 360) % 360);
+    return { ...fromCenter(g.x(), g.y(), w, h, rotation), w, h, rotation };
+  }
+
   private rotateBy(id: string, g: Konva.Group, deg: number) {
-    const r = rotateAroundCenter({ x: g.x(), y: g.y(), w: g.width(), h: g.height(), rotation: g.rotation() }, deg);
     // Enquanto gira, ignora atualizações do próprio item vindas da rede.
     this.transforming = id;
-    g.position({ x: r.x, y: r.y });
-    g.rotation(r.rotation);
+    g.rotation((((g.rotation() + deg) % 360) + 360) % 360);
     this.tr.forceUpdate();
     this.itemsLayer.batchDraw();
-    this.sendTransform(id, r, false);
+    this.sendTransform(id, this.modelOf(g), false);
     clearTimeout(this.rotTimer);
     this.rotTimer = setTimeout(() => {
       this.transforming = null;
-      this.sendTransform(id, { x: g.x(), y: g.y(), rotation: g.rotation() }, true);
+      this.sendTransform(id, this.modelOf(g), true);
     }, 300);
   }
 
@@ -563,7 +578,7 @@ export class BoardRenderer {
     g.listening(!blocked);
     g.draggable(!blocked && this.canDrag(item));
     if (!busy) {
-      g.position({ x: item.x, y: item.y });
+      g.position(centerOf(item));
       g.rotation(item.rotation);
       this.build(g, item, item.w, item.h);
     }
@@ -579,6 +594,8 @@ export class BoardRenderer {
   private build(g: Konva.Group, item: BoardItem, w: number, h: number) {
     g.destroyChildren();
     g.size({ width: w, height: h });
+    // Pivô no centro: girar e redimensionar em volta do próprio eixo.
+    g.offset({ x: w / 2, y: h / 2 });
     const gm = this.s.role === 'gm';
     const hidden = gm && isHiddenFromPlayers(item);
     g.opacity(hidden ? 0.55 : 1);
