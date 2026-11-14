@@ -1,5 +1,5 @@
 // Imagens enviadas pelo mestre: compressão, hash, envio em pedaços e cache no jogador.
-import { createStore, get, set, type UseStore } from 'idb-keyval';
+import { createStore, del, get, set, type UseStore } from 'idb-keyval';
 import { IMAGE_CHUNK_BYTES, type GmMessage } from '@ftt/shared';
 import type { CampaignStore } from '../storage/store';
 import { PATHS } from '../storage/campaign';
@@ -54,13 +54,81 @@ export interface ImageSource {
   url(hash: string): Promise<string | null>;
 }
 
+/** Arquivo como lido da pasta: com data de modificação e tamanho (para notar mudanças). */
+type Stamped = Blob & { lastModified?: number };
+const stampOf = (ext: string, b: Stamped) => `${ext}:${b.lastModified ?? 0}:${b.size}`;
+const POLL_MS = 3000;
+
 // ---------- Lado do mestre: lê da pasta ----------
 
 export class GmImages implements ImageSource {
   private urls = new Map<string, string>();
   private blobs = new Map<string, Blob>();
+  /** Extensão e "carimbo" (data + tamanho) do arquivo de cada imagem já lida. */
+  private stamps = new Map<string, { ext: string; stamp: string }>();
+  private timer: ReturnType<typeof setInterval> | undefined;
+  private observer: { disconnect(): void } | null = null;
+  private checking = false;
 
   constructor(private store: CampaignStore) {}
+
+  /**
+   * Vigia a pasta imagens/ (só no modo pasta): se o arquivo de uma imagem em uso
+   * for trocado (mesmo nome), avisa para redesenhar. Imagens novas são ignoradas.
+   */
+  watch(onChange: (hash: string) => void) {
+    if (this.store.kind !== 'fs') return;
+    const check = () => void this.check(onChange);
+    this.timer = setInterval(() => {
+      if (document.visibilityState === 'visible') check();
+    }, POLL_MS);
+    // No Chrome com FileSystemObserver, a troca aparece na hora.
+    const FSO = (window as unknown as { FileSystemObserver?: new (cb: () => void) => { observe(h: unknown): Promise<void>; disconnect(): void } }).FileSystemObserver;
+    const handle = (this.store as unknown as { handle?: FileSystemDirectoryHandle }).handle;
+    if (FSO && handle) {
+      handle
+        .getDirectoryHandle(PATHS.imageDir, { create: true })
+        .then((dir) => {
+          const obs = new FSO(check);
+          this.observer = obs;
+          return obs.observe(dir);
+        })
+        .catch(() => {});
+    }
+  }
+
+  private async check(onChange: (hash: string) => void) {
+    if (this.checking) return;
+    this.checking = true;
+    try {
+      for (const hash of new Set([...this.urls.keys(), ...this.blobs.keys()])) {
+        const known = this.stamps.get(hash);
+        const exts = known ? [known.ext, ...['webp', 'png', 'jpg'].filter((e) => e !== known.ext)] : ['webp', 'png', 'jpg'];
+        for (const ext of exts) {
+          const b = (await this.store.readBlob(`${PATHS.imageDir}/${hash}.${ext}`)) as Stamped | null;
+          if (!b) continue;
+          const stamp = stampOf(ext, b);
+          if (!known) this.stamps.set(hash, { ext, stamp });
+          else if (known.stamp !== stamp) {
+            this.stamps.set(hash, { ext, stamp });
+            this.forget(hash);
+            onChange(hash);
+          }
+          break;
+        }
+      }
+    } finally {
+      this.checking = false;
+    }
+  }
+
+  /** Esquece o que estava em memória (a próxima leitura pega o arquivo novo). */
+  forget(hash: string) {
+    this.blobs.delete(hash);
+    const u = this.urls.get(hash);
+    if (u) setTimeout(() => URL.revokeObjectURL(u), 5000);
+    this.urls.delete(hash);
+  }
 
   async save(img: ProcessedImage) {
     const ext = EXT[img.blob.type] ?? 'webp';
@@ -74,6 +142,7 @@ export class GmImages implements ImageSource {
     for (const ext of ['webp', 'png', 'jpg']) {
       const b = await this.store.readBlob(`${PATHS.imageDir}/${hash}.${ext}`);
       if (b) {
+        if (!this.stamps.has(hash)) this.stamps.set(hash, { ext, stamp: stampOf(ext, b as Stamped) });
         const typed = b.type ? b : new Blob([b], { type: `image/${ext === 'jpg' ? 'jpeg' : ext}` });
         this.blobs.set(hash, typed);
         return typed;
@@ -107,6 +176,8 @@ export class GmImages implements ImageSource {
   }
 
   dispose() {
+    clearInterval(this.timer);
+    this.observer?.disconnect();
     for (const u of this.urls.values()) URL.revokeObjectURL(u);
   }
 }
@@ -172,6 +243,20 @@ export class PlayerImages implements ImageSource {
       const blob = new Blob(p.got, { type: p.mime.startsWith('image/') ? p.mime : 'image/webp' });
       set(m.hash, blob, idb()).catch(() => {});
       this.publish(m.hash, blob);
+    }
+  }
+
+  /** O mestre trocou o arquivo: apaga o cache para baixar de novo. */
+  async invalidate(hash: string) {
+    const u = this.urls.get(hash);
+    if (u) setTimeout(() => URL.revokeObjectURL(u), 5000);
+    this.urls.delete(hash);
+    this.requested.delete(hash);
+    this.parts.delete(hash);
+    try {
+      await del(hash, idb());
+    } catch {
+      /* sem cache */
     }
   }
 

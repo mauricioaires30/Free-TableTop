@@ -14,6 +14,7 @@
 
   $effect(() => {
     const h = hash;
+    void session.imagesVersion;
     url = null;
     if (!h) return;
     let alive = true;

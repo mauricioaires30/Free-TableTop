@@ -106,6 +106,8 @@ export type GmMessage =
   | { k: 'filter'; filter: FilterConfig }
   | { k: 'imgChunk'; hash: string; i: number; n: number; mime: string; data: string }
   | { k: 'imgMissing'; hash: string }
+  /** O arquivo da imagem mudou na pasta do mestre: apague o cache e baixe de novo. */
+  | { k: 'imgChanged'; hash: string }
   | { k: 'focus'; x: number; y: number; scale: number }
   | { k: 'notice'; text: string }
   | { k: 'doc'; col: Collection; doc: AnyDoc }

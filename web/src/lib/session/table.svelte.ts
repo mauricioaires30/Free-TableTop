@@ -84,6 +84,15 @@ export abstract class TableSession {
   cursors = new Map<string, CursorState>();
   /** O quadro registra aqui como centralizar a visão ("trazer todos para cá"). */
   focusHandler: ((x: number, y: number, scale: number) => void) | null = null;
+  /** O quadro registra aqui como recarregar uma imagem que mudou. */
+  imageHandler: ((hash: string) => void) | null = null;
+  /** Sobe quando alguma imagem muda (retratos se atualizam). */
+  imagesVersion = $state(0);
+
+  protected imageChanged(hash: string) {
+    this.imageHandler?.(hash);
+    this.imagesVersion++;
+  }
 
   get actor(): Actor {
     return { role: this.role, pid: this.myPid };

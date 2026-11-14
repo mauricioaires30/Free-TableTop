@@ -17,7 +17,7 @@
 
   function onKey(e: KeyboardEvent) {
     const t = e.target as HTMLElement;
-    if (t.closest('input, textarea, select, [contenteditable]') || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (t.closest?.('input, textarea, select, [contenteditable]') || e.ctrlKey || e.metaKey || e.altKey) return;
     const map: Record<string, Tool> = { v: 'select', r: 'ruler', p: 'ping', n: 'fog' };
     const next = map[e.key.toLowerCase()];
     if (next && (next !== 'fog' || gm)) tool = next;

@@ -101,6 +101,11 @@ export class GmSession extends TableSession {
     this.log = recentLog;
     this.logByDay.set(todayKey(), todayLog);
     this.images = new GmImages(store);
+    // Trocou o arquivo de uma imagem na pasta: redesenha aqui e avisa os jogadores.
+    this.images.watch((hash) => {
+      this.imageChanged(hash);
+      this.broadcast({ k: 'imgChanged', hash });
+    });
     this.saver.onChange = (busy, err) => {
       this.saving = err ? 'error' : busy ? 'saving' : 'idle';
       if (err) this.toast(err, 'error');

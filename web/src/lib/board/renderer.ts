@@ -104,6 +104,10 @@ export class BoardRenderer {
     this.syncMap();
     document.fonts?.ready.then(() => this.rebuildAll());
     s.focusHandler = (x, y, scale) => this.focus(x, y, scale);
+    s.imageHandler = (hash) => {
+      // Mantém a imagem antiga na tela até a nova carregar.
+      if (this.images.has(hash)) void this.loadImage(hash, true);
+    };
     this.raf = requestAnimationFrame(this.tick);
   }
 
@@ -776,8 +780,8 @@ export class BoardRenderer {
     hud.add(lbl);
   }
 
-  private async loadImage(hash: string) {
-    this.images.set(hash, 'loading');
+  private async loadImage(hash: string, refresh = false) {
+    if (!refresh) this.images.set(hash, 'loading');
     const url = await this.s.images.url(hash);
     if (!url) {
       this.images.set(hash, 'missing');
@@ -940,6 +944,7 @@ export class BoardRenderer {
     clearTimeout(this.rotTimer);
     this.ro.disconnect();
     if (this.s.focusHandler) this.s.focusHandler = null;
+    this.s.imageHandler = null;
     this.stage.destroy();
   }
 }

@@ -142,6 +142,9 @@ export class PlayerSession extends TableSession {
       case 'imgMissing':
         this.images.missing(d.hash);
         break;
+      case 'imgChanged':
+        void this.images.invalidate(d.hash).then(() => this.imageChanged(d.hash));
+        break;
       case 'focus':
         this.focusHandler?.(d.x, d.y, d.scale);
         break;
