@@ -256,6 +256,8 @@
         <button onclick={() => renderer?.zoomBy(1.25)} aria-label="Aproximar">＋</button>
         <button onclick={() => renderer?.zoomBy(0.8)} aria-label="Afastar">－</button>
         <button onclick={() => renderer?.fitAll()} aria-label="Ver tudo" title="Ver tudo">⛶</button>
+        <button onclick={() => session.undo()} disabled={!session.canUndo} aria-label="Desfazer" title="Desfazer (Ctrl+Z)">↶</button>
+        <button onclick={() => session.redo()} disabled={!session.canRedo} aria-label="Refazer" title="Refazer (Ctrl+Y)">↷</button>
       </div>
       {#if gm && session.itemsVersion >= 0 && session.items.size === 0}
         <div class="empty-hint">

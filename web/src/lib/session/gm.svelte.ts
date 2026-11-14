@@ -10,7 +10,7 @@ import {
   type EditPatch, type FieldValue, type FilterConfig, type GmMessage, type LogEntry, type Peer, type Perm,
   type PlayerIntent, type RelayToClient, type Roster, type Sheet, type SheetTemplate, type TableSettings,
   type JournalEntry, type WikiPage, type RandomTable, type FogShape, type GridSettings, type Layer, type MapSettings, type TransformPatch,
-  type ListRow, type AttributeDef,
+  type ListRow, type AttributeDef, UndoHistory, diffBoard, type BoardChange,
 } from '@ftt/shared';
 import { RelayClient } from '../net/client';
 import { fromBase64, GmImages, processImage } from '../images/images';
@@ -46,6 +46,13 @@ export class GmSession extends TableSession {
   private knownPeers = new Set<string>();
   /** Imagens de personagem chegando em pedaços, por jogador e ficha. */
   private avatarParts = new Map<string, { n: number; got: Uint8Array<ArrayBuffer>[]; count: number; bytes: number }>();
+  /** Desfazer: retrato do quadro na última mudança salva (id -> JSON). */
+  private history = new UndoHistory(100);
+  private shadow = new Map<string, string>();
+  private shadowMap = '';
+  /** Mudança feita por um jogador (não entra no desfazer do mestre). */
+  private byPlayer = false;
+  private restoring = false;
 
   static async open(store: CampaignStore): Promise<GmSession | null> {
     const campaign = await readCampaign(store);
@@ -86,6 +93,7 @@ export class GmSession extends TableSession {
     this.filter = campaign.filter;
     this.wf = new WordFilter(campaign.filter.words);
     for (const i of items) this.items.set(i.id, i);
+    this.takeShadow();
     this.log = recentLog;
     this.logByDay.set(todayKey(), todayLog);
     this.images = new GmImages(store);
@@ -180,6 +188,15 @@ export class GmSession extends TableSession {
   }
 
   private handleIntent(pid: string, d: PlayerIntent) {
+    this.byPlayer = true;
+    try {
+      this.handlePlayer(pid, d);
+    } finally {
+      this.byPlayer = false;
+    }
+  }
+
+  private handlePlayer(pid: string, d: PlayerIntent) {
     const actor: Actor = { role: 'player', pid };
     const r = this.roster[pid];
     if (r?.banned) return;
@@ -1127,7 +1144,70 @@ export class GmSession extends TableSession {
 
   // ---------- persistência ----------
 
+  // ---------- desfazer / refazer ----------
+
+  private boardShadow(): Map<string, string> {
+    return new Map([...this.items.values()].map((i) => [i.id, JSON.stringify(i)]));
+  }
+
+  private takeShadow() {
+    this.shadow = this.boardShadow();
+    this.shadowMap = JSON.stringify($state.snapshot(this.map));
+  }
+
+  /** Compara com o último retrato; se a mudança foi do mestre, vira um passo do desfazer. */
+  private recordHistory() {
+    const next = this.boardShadow();
+    const nextMap = JSON.stringify($state.snapshot(this.map));
+    if (!this.byPlayer && !this.restoring) {
+      const change: BoardChange = { items: diffBoard(this.shadow, next) };
+      if (nextMap !== this.shadowMap) change.map = { before: this.shadowMap, after: nextMap };
+      this.history.push(change);
+    }
+    this.shadow = next;
+    this.shadowMap = nextMap;
+    this.canUndo = this.history.canUndo;
+    this.canRedo = this.history.canRedo;
+  }
+
+  private applyChange(c: BoardChange, side: 'before' | 'after') {
+    for (const e of c.items) {
+      const v = e[side];
+      if (v === null) {
+        if (this.items.delete(e.id)) this.broadcast({ k: 'remove', id: e.id });
+      } else {
+        const item = JSON.parse(v) as BoardItem;
+        this.items.set(item.id, item);
+        this.broadcastItem(item);
+      }
+    }
+    if (c.map) {
+      this.map = JSON.parse(c.map[side]) as MapSettings;
+      this.broadcast({ k: 'map', map: $state.snapshot(this.map) });
+    }
+    this.bump();
+    this.restoring = true;
+    try {
+      this.saveBoard();
+    } finally {
+      this.restoring = false;
+    }
+  }
+
+  undo() {
+    const c = this.history.undo();
+    if (c) this.applyChange(c, 'before');
+    else this.toast('Nada para desfazer.');
+  }
+
+  redo() {
+    const c = this.history.redo();
+    if (c) this.applyChange(c, 'after');
+    else this.toast('Nada para refazer.');
+  }
+
   private saveBoard() {
+    this.recordHistory();
     this.saver.schedule('quadro', () =>
       this.store.writeText(
         PATHS.board,

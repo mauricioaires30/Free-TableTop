@@ -63,6 +63,9 @@ export abstract class TableSession {
   /** Réguas e pings dos outros (desenhados pelo quadro, fora do estado reativo). */
   rulers = new Map<string, Ruler>();
   pings: Ping[] = [];
+  /** Desfazer/refazer do quadro. */
+  canUndo = $state(false);
+  canRedo = $state(false);
   /** Fichas abertas como janelas sobre o quadro (só interface). */
   openSheets = $state<string[]>([]);
   /** Páginas do diário/wiki abertas como janelas. */
@@ -170,6 +173,8 @@ export abstract class TableSession {
   abstract chat(text: string): boolean;
   abstract roll(expr: string, priv: boolean, label?: string): void;
   abstract transform(id: string, patch: TransformPatch, final: boolean): void;
+  abstract undo(): void;
+  abstract redo(): void;
   abstract edit(id: string, patch: EditPatch): void;
   abstract zorder(id: string, dir: 'front' | 'back'): void;
   abstract newSheet(templateId: string, name: string): void;

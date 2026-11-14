@@ -79,6 +79,16 @@
   function onKey(e: KeyboardEvent) {
     const t = e.target as HTMLElement;
     if (t.closest('input, textarea, select, [contenteditable]')) return;
+    // Ctrl+Z desfaz; Ctrl+Y ou Ctrl+Shift+Z refaz (Cmd no Mac). Campos de texto têm o próprio desfazer.
+    if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+      const k = e.key.toLowerCase();
+      if (k === 'z' || k === 'y') {
+        e.preventDefault();
+        if (k === 'y' || e.shiftKey) session.redo();
+        else session.undo();
+        return;
+      }
+    }
     const id = renderer?.selectedId;
     if (!id) return;
     if (gm && (e.key === 'Delete' || e.key === 'Backspace')) {

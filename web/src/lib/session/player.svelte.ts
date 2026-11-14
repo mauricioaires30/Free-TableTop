@@ -2,7 +2,7 @@
 import {
   AVATAR_SIDE, can, DiceError, IMAGE_CHUNK_BYTES, MAX_AVATAR_BYTES, parseDice, PROTOCOL_VERSION, WordFilter,
   type AnyDoc, type EditPatch, type FieldValue, type GmMessage, type PlayerIntent, type RelayToClient,
-  type TransformPatch,
+  type TransformPatch, type BoardItem,
 } from '@ftt/shared';
 import { RelayClient } from '../net/client';
 import { PlayerImages, processImage, toBase64 } from '../images/images';
@@ -249,9 +249,55 @@ export class PlayerSession extends TableSession {
   transform(id: string, patch: TransformPatch, final: boolean) {
     const item = this.items.get(id);
     if (!item || !this.can('move', item)) return;
+    // Guarda onde o token estava antes do arrasto para poder desfazer.
+    if (!this.moveStart.has(id)) this.moveStart.set(id, this.posOf(item));
     Object.assign(item, patch);
-    if (final) this.bump();
+    if (final) {
+      this.bump();
+      const before = this.moveStart.get(id)!;
+      this.moveStart.delete(id);
+      this.undoMoves.push({ id, pos: before });
+      if (this.undoMoves.length > 50) this.undoMoves.shift();
+      this.redoMoves = [];
+      this.updateUndo();
+    }
     this.intent({ k: 'transform', id, patch, final });
+  }
+
+  // ---------- desfazer: só os movimentos do próprio token ----------
+  private moveStart = new Map<string, TransformPatch>();
+  private undoMoves: Array<{ id: string; pos: TransformPatch }> = [];
+  private redoMoves: Array<{ id: string; pos: TransformPatch }> = [];
+
+  private posOf(i: BoardItem): TransformPatch {
+    return { x: i.x, y: i.y, w: i.w, h: i.h, rotation: i.rotation };
+  }
+
+  private updateUndo() {
+    this.canUndo = this.undoMoves.length > 0;
+    this.canRedo = this.redoMoves.length > 0;
+  }
+
+  private jump(from: Array<{ id: string; pos: TransformPatch }>, to: Array<{ id: string; pos: TransformPatch }>) {
+    let step = from.pop();
+    // Pula passos de tokens que não existem mais (ou que deixaram de ser meus).
+    while (step && !(this.items.get(step.id) && this.can('move', this.items.get(step.id)!))) step = from.pop();
+    if (step) {
+      const item = this.items.get(step.id)!;
+      to.push({ id: step.id, pos: this.posOf(item) });
+      Object.assign(item, step.pos);
+      this.bump();
+      this.intent({ k: 'transform', id: step.id, patch: step.pos, final: true });
+    }
+    this.updateUndo();
+  }
+
+  undo() {
+    this.jump(this.undoMoves, this.redoMoves);
+  }
+
+  redo() {
+    this.jump(this.redoMoves, this.undoMoves);
   }
 
   edit(id: string, patch: EditPatch) {

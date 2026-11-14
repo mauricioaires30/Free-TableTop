@@ -11,3 +11,4 @@ export * from './map';
 export * from './tables';
 export * from './notes';
 export * from './calc';
+export * from './undo';
