@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { active, go, parseInviteLink } from '../lib/router.svelte';
   import { GmSession } from '../lib/session/gm.svelte';
+  import { TEMPLATE_PRESETS } from '@ftt/shared';
   import { newCampaign, PATHS } from '../lib/storage/campaign';
   import { campaignNameFromZip, readZip, roomIdFromZip, writeFiles } from '../lib/storage/backup';
   import {
@@ -11,6 +12,7 @@
 
   const folderOk = hasFolderAccess();
   let name = $state('');
+  let system = $state(TEMPLATE_PRESETS[0].name);
   let link = $state('');
   let busy = $state(false);
   let error = $state('');
@@ -45,7 +47,7 @@
 
   const create = () =>
     run(async () => {
-      const c = newCampaign(name);
+      const c = newCampaign(name, system);
       if (folderOk) {
         const parent = await window.showDirectoryPicker!({ id: 'ftt-campanhas', mode: 'readwrite' });
         const dir = await parent.getDirectoryHandle(folderName(c.name), { create: true });
@@ -149,6 +151,11 @@
       </p>
       <label for="cname">Nome da campanha</label>
       <input id="cname" bind:value={name} placeholder="Ex.: O Segredo na Floresta" maxlength="60" onkeydown={(e) => e.key === 'Enter' && create()} />
+      <label for="csys">Sistema (ficha e atributos)</label>
+      <select id="csys" bind:value={system}>
+        {#each TEMPLATE_PRESETS as p (p.name)}<option value={p.name}>{p.name}</option>{/each}
+      </select>
+      <p class="muted small-note">Dá para mudar tudo depois: atributos na aba Mesa e a ficha em "Modelos de ficha".</p>
       <button class="primary wide" disabled={busy} onclick={create}>
         {folderOk ? 'Escolher local e criar' : 'Criar mesa'}
       </button>
@@ -200,6 +207,10 @@
 </div>
 
 <style>
+  .small-note {
+    font-size: 12px;
+    margin: 4px 0 10px;
+  }
   .home {
     max-width: 1100px;
     margin: 0 auto;

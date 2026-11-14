@@ -22,6 +22,10 @@ export interface CampaignFile {
   seeded?: boolean;
   /** Já criou as tabelas aleatórias prontas. */
   seededTables?: boolean;
+  /** Sistema (modelo pronto) escolhido ao criar a mesa. */
+  system?: string;
+  /** Só na leitura: o arquivo é de uma versão sem a lista de atributos salva. */
+  noAttrList?: boolean;
 }
 
 export interface BoardFile {
@@ -38,7 +42,7 @@ export const PATHS = {
   imageDir: 'imagens',
 };
 
-export function newCampaign(name: string): CampaignFile {
+export function newCampaign(name: string, system?: string): CampaignFile {
   return {
     app: 'free-tabletop',
     version: 1,
@@ -49,6 +53,8 @@ export function newCampaign(name: string): CampaignFile {
     filter: structuredClone(DEFAULT_FILTER),
     roster: {},
     createdAt: Date.now(),
+    ...(system ? { system } : {}),
+    settings: { ...DEFAULT_SETTINGS },
   };
 }
 
@@ -59,6 +65,7 @@ export async function readCampaign(store: CampaignStore): Promise<CampaignFile |
   if (c.app !== 'free-tabletop' || !c.roomId || !c.gmKey) throw new Error('campanha.json inválido');
   c.filter ??= structuredClone(DEFAULT_FILTER);
   c.roster ??= {};
+  if (!Array.isArray(c.settings?.attributes)) c.noAttrList = true;
   c.settings = { ...DEFAULT_SETTINGS, ...c.settings };
   return c;
 }

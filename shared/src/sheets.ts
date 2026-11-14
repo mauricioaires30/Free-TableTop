@@ -344,9 +344,12 @@ export function hpOf(sheet: Sheet, t: SheetTemplate | undefined): ResourceValue 
   return isResource(v) ? v : null;
 }
 
-type Preset = Omit<SheetTemplate, 'id' | 'perm' | 'updatedAt'>;
+/** Modelo pronto = um "sistema": o modelo de ficha e os atributos da campanha que ele usa. */
+export type Preset = Omit<SheetTemplate, 'id' | 'perm' | 'updatedAt'> & { attributes?: AttributeDef[] };
 
-const attrs = (roll: string, ids: string[], label = 'Atributos'): TemplateField => ({ id: 'atributos', label, type: 'attrs', roll, attrs: ids, wide: true });
+/** Bloco de atributos sem lista: mostra todos os atributos da campanha (inclusive os que o mestre criar depois). */
+const attrs = (roll: string, label = 'Atributos'): TemplateField => ({ id: 'atributos', label, type: 'attrs', roll, wide: true });
+const A = (...ids: string[]): AttributeDef[] => ids.map((id) => DEFAULT_ATTRIBUTES.find((a) => a.id === id) ?? { id, label: id });
 const res = (id: string, label: string, max: number, color: string): TemplateField => ({ id, label, type: 'resource', max, color });
 const section = (id: string, label: string): TemplateField => ({ id, label, type: 'section' });
 const long = (id: string, label: string): TemplateField => ({ id, label, type: 'textarea', wide: true });
@@ -363,9 +366,11 @@ export const TEMPLATE_PRESETS: Preset[] = [
     attrMod: 'none',
     initiative: '1d20',
     hpField: 'pv',
+    attributes: [],
     fields: [
       { id: 'conceito', label: 'Conceito', type: 'text', wide: true },
       res('pv', 'Vida', 10, '#c0392b'),
+      attrs('1d20+{v}'),
       res('energia', 'Energia', 10, '#2e86de'),
       long('habilidades', 'Habilidades'),
       list('inventario', 'Inventário', { showQty: true }),
@@ -377,13 +382,14 @@ export const TEMPLATE_PRESETS: Preset[] = [
     attrMod: 'd20',
     initiative: '1d20+{des.mod}',
     hpField: 'pv',
+    attributes: A('for', 'des', 'con', 'int', 'sab', 'car'),
     fields: [
       { id: 'classe', label: 'Classe', type: 'text' },
       { id: 'origem', label: 'Origem', type: 'text' },
       { id: 'nivel', label: 'Nível', type: 'number' },
       { id: 'ca', label: 'Defesa (CA)', type: 'number' },
       res('pv', 'Pontos de vida', 10, '#c0392b'),
-      attrs('1d20+{mod}', ['for', 'des', 'con', 'int', 'sab', 'car']),
+      attrs('1d20+{mod}'),
       section('detalhes', 'Detalhes'),
       long('pericias', 'Perícias e proficiências'),
       list('magias', 'Magias e habilidades', { showRoll: true }),
@@ -395,12 +401,13 @@ export const TEMPLATE_PRESETS: Preset[] = [
     attrMod: 'none',
     initiative: '{agi}d20kh1',
     hpField: 'pv',
+    attributes: A('agi', 'for', 'itl', 'pre', 'vig'),
     fields: [
       { id: 'origem', label: 'Origem', type: 'text' },
       { id: 'classe', label: 'Classe', type: 'text' },
       { id: 'exposicao', label: 'Exposição (%)', type: 'number' },
       { id: 'defesa', label: 'Defesa', type: 'number' },
-      attrs('{v}d20kh1', ['agi', 'for', 'itl', 'pre', 'vig']),
+      attrs('{v}d20kh1'),
       section('status', 'Status'),
       res('pv', 'Vida', 20, '#c0392b'),
       res('san', 'Sanidade', 12, '#8e44ad'),
@@ -417,9 +424,10 @@ export const TEMPLATE_PRESETS: Preset[] = [
     attrDefault: 2,
     initiative: '1d10+{des}',
     hpField: 'vida',
+    attributes: A('for', 'des', 'vig', 'int', 'pre'),
     fields: [
       { id: 'conceito', label: 'Conceito', type: 'text', wide: true },
-      attrs('{v}d10>=8', ['for', 'des', 'vig', 'int', 'pre']),
+      attrs('{v}d10>=8'),
       res('vida', 'Vitalidade', 7, '#c0392b'),
       res('vontade', 'Força de vontade', 5, '#2e86de'),
       list('pericias', 'Perícias', { showRoll: true }),
@@ -434,9 +442,10 @@ export const TEMPLATE_PRESETS: Preset[] = [
     attrDefault: 50,
     initiative: '{des}',
     hpField: 'pv',
+    attributes: A('for', 'des', 'con', 'int', 'pre'),
     fields: [
       { id: 'ocupacao', label: 'Ocupação', type: 'text', wide: true },
-      attrs('1d100<={v}', ['for', 'des', 'con', 'int', 'pre']),
+      attrs('1d100<={v}'),
       res('pv', 'Pontos de vida', 10, '#c0392b'),
       res('san', 'Sanidade', 50, '#8e44ad'),
       list('pericias', 'Perícias', { showRoll: true }),
@@ -451,10 +460,11 @@ export const TEMPLATE_PRESETS: Preset[] = [
     attrDefault: 0,
     initiative: '4dF+{agi}',
     hpField: 'estresse',
+    attributes: A('agi', 'for', 'itl', 'pre', 'vig'),
     fields: [
       { id: 'conceito', label: 'Conceito', type: 'text', wide: true },
       { id: 'dificuldade', label: 'Dificuldade', type: 'text', wide: true },
-      attrs('4dF+{v}', ['agi', 'for', 'itl', 'pre', 'vig'], 'Perícias'),
+      attrs('4dF+{v}', 'Perícias'),
       list('aspectos', 'Aspectos'),
       list('facanhas', 'Façanhas'),
       res('estresse', 'Estresse', 3, '#c0392b'),
@@ -464,6 +474,71 @@ export const TEMPLATE_PRESETS: Preset[] = [
   {
     name: 'Em branco',
     attrMod: 'none',
-    fields: [long('notas', 'Anotações')],
+    attributes: [],
+    fields: [attrs('1d20+{v}'), long('notas', 'Anotações')],
   },
 ];
+
+/** Modelo de criatura/NPC do mesmo sistema: mesmos atributos e vida, com ataques. */
+export function creaturePreset(p: Preset): Preset {
+  const block = p.fields.find((f) => f.type === 'attrs');
+  const hp = p.fields.find((f) => f.id === p.hpField && f.type === 'resource');
+  return {
+    name: 'Criatura / NPC',
+    attrMod: p.attrMod,
+    ...(p.attrModFormula ? { attrModFormula: p.attrModFormula } : {}),
+    ...(p.attrDefault !== undefined ? { attrDefault: p.attrDefault } : {}),
+    ...(p.initiative ? { initiative: p.initiative } : {}),
+    ...(hp ? { hpField: hp.id } : {}),
+    fields: [
+      { id: 'descricao', label: 'Descrição', type: 'text', wide: true },
+      ...(hp ? [{ ...hp }] : []),
+      ...(block ? [{ ...block }] : []),
+      list('ataques', 'Ataques e habilidades', { showRoll: true }),
+      long('notas', 'Anotações'),
+    ],
+  };
+}
+
+/** Tira o que não é do modelo (a lista de atributos do sistema vai para a campanha). */
+export function presetTemplate(p: Preset): Omit<SheetTemplate, 'id' | 'perm' | 'updatedAt'> {
+  const { attributes: _a, ...t } = p;
+  return structuredClone(t);
+}
+
+/**
+ * Campanhas antigas: modelos com campos "Atributo" soltos viram um bloco de
+ * atributos da campanha (os valores das fichas continuam com o mesmo código).
+ * Retorna null se o modelo já está no formato novo.
+ */
+export function migrateTemplate(t: SheetTemplate): { template: SheetTemplate; defs: AttributeDef[] } | null {
+  const loose = t.fields.filter((f) => f.type === 'attr');
+  if (!loose.length || t.fields.some((f) => f.type === 'attrs')) return null;
+  const defs = loose.map((f) => ({ id: f.id, label: f.label }));
+  const block: TemplateField = { id: 'atributos', label: 'Atributos', type: 'attrs', roll: loose.find((f) => f.roll)?.roll, attrs: defs.map((d) => d.id), wide: true };
+  if (!block.roll) delete block.roll;
+  if (t.fields.some((f) => f.id === 'atributos')) block.id = `atributos_${t.fields.length}`;
+  const fields: TemplateField[] = [];
+  for (const f of t.fields) {
+    if (f.type !== 'attr') fields.push(f);
+    else if (f === loose[0]) fields.push(block);
+  }
+  return { template: { ...t, fields }, defs };
+}
+
+/** Atributos usados pelos modelos (para campanhas que ainda não tinham a lista salva). */
+export function attributesUsedBy(templates: SheetTemplate[], extra: AttributeDef[] = []): AttributeDef[] {
+  const out: AttributeDef[] = [];
+  const add = (d: AttributeDef) => {
+    if (!out.some((x) => x.id === d.id)) out.push(d);
+  };
+  for (const t of templates) {
+    for (const f of t.fields) {
+      if (f.type !== 'attrs') continue;
+      // Bloco sem lista usava todos os atributos padrão.
+      for (const id of f.attrs?.length ? f.attrs : DEFAULT_ATTRIBUTES.map((a) => a.id)) add(extra.find((d) => d.id === id) ?? A(id)[0]);
+    }
+  }
+  for (const d of extra) add(d);
+  return out;
+}

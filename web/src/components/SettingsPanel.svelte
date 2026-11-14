@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { CONDITIONS, DEFAULT_ATTRIBUTES, DEFAULT_BAD_WORDS, fieldIdFromLabel, type AttributeDef, type GridSettings } from '@ftt/shared';
+  import { CONDITIONS, DEFAULT_BAD_WORDS, type AttributeDef, type GridSettings } from '@ftt/shared';
   import type { GmSession } from '../lib/session/gm.svelte';
   import InviteBox from './InviteBox.svelte';
   import { download, exportZip, safeFileName } from '../lib/storage/backup';
@@ -39,7 +39,12 @@
   }
 
   // ---------- atributos da campanha ----------
-  const attributes = $derived(gm.settings.attributes ?? DEFAULT_ATTRIBUTES);
+  const attributes = $derived(gm.settings.attributes ?? []);
+  const templates = $derived(Object.values(gm.docs.templates).sort((a, b) => a.name.localeCompare(b.name)));
+
+  function setting(patch: Partial<typeof gm.settings>) {
+    gm.setSettings({ ...($state.snapshot(gm.settings) as typeof gm.settings), ...patch });
+  }
   let newAttr = $state('');
 
   function saveAttributes(list: AttributeDef[]) {
@@ -47,11 +52,8 @@
   }
 
   function addAttribute() {
-    const label = newAttr.trim().slice(0, 30);
-    if (!label) return;
-    // O código não pode colidir com outro atributo nem com campos dos modelos (ex.: {pv}).
-    const taken = new Set([...attributes.map((a) => a.id), ...Object.values(gm.docs.templates).flatMap((t) => t.fields.map((f) => f.id))]);
-    saveAttributes([...($state.snapshot(attributes) as AttributeDef[]), { id: fieldIdFromLabel(label, taken), label }]);
+    if (!newAttr.trim()) return;
+    gm.addAttribute(newAttr);
     newAttr = '';
   }
 
@@ -156,8 +158,9 @@
   <section>
     <h3>Atributos da campanha</h3>
     <p class="muted small">
-      Os atributos que existem no seu sistema. Cada modelo de ficha escolhe quais destes usa; os jogadores só preenchem os valores.
+      Os atributos que existem no seu sistema. Aparecem em todas as fichas (cada modelo pode limitar quais usa); os jogadores só preenchem os valores.
     </p>
+    {#if attributes.length === 0}<p class="muted small">Nenhum atributo ainda.</p>{/if}
     <ul class="attrs">
       {#each attributes as a (a.id)}
         <li>
@@ -198,7 +201,16 @@
       />
       Jogadores podem criar a própria ficha
     </label>
-    <p class="muted small">Cada jogador vê e edita só as fichas dele. Você vê todas e pode liberar outras pelo 🔐.</p>
+    <label for="ptpl">Modelo das fichas dos jogadores</label>
+    <select id="ptpl" value={gm.settings.playerTemplateId ?? ''} onchange={(e) => setting({ playerTemplateId: e.currentTarget.value || undefined })}>
+      <option value="">Escolha um modelo</option>
+      {#each templates as t (t.id)}<option value={t.id}>{t.name}</option>{/each}
+    </select>
+    <label class="check">
+      <input type="checkbox" checked={!!gm.settings.showNpcHp} onchange={(e) => setting({ showNpcHp: e.currentTarget.checked || undefined })} />
+      Jogadores veem a vida dos NPCs e inimigos nos tokens
+    </label>
+    <p class="muted small">O jogador só digita o nome; a ficha segue o modelo escolhido aqui. Cada um vê e edita só as fichas dele; você vê todas e pode liberar outras pelo 🔐.</p>
   </section>
 
   <section>

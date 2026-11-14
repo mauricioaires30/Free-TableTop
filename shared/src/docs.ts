@@ -1,7 +1,7 @@
 // Documentos da campanha (fichas, modelos...), cada um com suas permissões.
 // Ficam em pastas próprias na pasta do mestre e são sincronizados um a um.
 import { can, type Actor, type Perm } from './permissions';
-import { DEFAULT_ATTRIBUTES, type AttributeDef, type Sheet, type SheetTemplate } from './sheets';
+import type { AttributeDef, Sheet, SheetTemplate } from './sheets';
 import { CONDITIONS } from './map';
 import type { JournalEntry, WikiPage } from './notes';
 import type { RandomTable } from './tables';
@@ -37,11 +37,15 @@ export interface TableSettings {
   conditions: string[];
   /** Ordem da iniciativa: maior primeiro (desc) ou menor primeiro (asc). */
   initiativeOrder: 'desc' | 'asc';
+  /** Modelo usado quando um jogador cria a própria ficha (ele não escolhe). */
+  playerTemplateId?: string;
+  /** Jogadores veem a vida dos NPCs e inimigos em cima dos tokens. */
+  showNpcHp?: boolean;
 }
 
 export const DEFAULT_SETTINGS: TableSettings = {
   allowPlayerSheets: true,
-  attributes: DEFAULT_ATTRIBUTES,
+  attributes: [],
   conditions: CONDITIONS,
   initiativeOrder: 'desc',
 };

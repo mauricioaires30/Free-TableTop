@@ -32,13 +32,14 @@ describe('fichas', () => {
 
   it('modificador estilo d20', () => {
     const t = tpl(1);
+    const A1 = TEMPLATE_PRESETS[1].attributes!;
     const s = sheetOf(t, { des: 14, for: 8 });
-    expect(resolveFormula('1d20+{mod}', s, t, 'des', A)).toBe('1d20+2');
-    expect(resolveFormula('1d20+{mod}', s, t, 'for', A)).toBe('1d20-1');
-    expect(resolveFormula(t.initiative!, s, t, undefined, A)).toBe('1d20+2');
-    expect(resolveFormula('{pv.max}', s, t, undefined, A)).toBe('10');
-    // Atributo que o modelo não usa não vale na fórmula.
-    expect(() => resolveFormula('{agi}', s, t, undefined, A)).toThrow(FormulaError);
+    expect(resolveFormula('1d20+{mod}', s, t, 'des', A1)).toBe('1d20+2');
+    expect(resolveFormula('1d20+{mod}', s, t, 'for', A1)).toBe('1d20-1');
+    expect(resolveFormula(t.initiative!, s, t, undefined, A1)).toBe('1d20+2');
+    expect(resolveFormula('{pv.max}', s, t, undefined, A1)).toBe('10');
+    // Atributo que não existe na campanha não vale na fórmula.
+    expect(() => resolveFormula('{agi}', s, t, undefined, A1)).toThrow(FormulaError);
   });
 
   it('atributo como quantidade de dados', () => {
@@ -57,7 +58,7 @@ describe('fichas', () => {
   it('valida valores enviados pelo jogador', () => {
     const t = tpl(1);
     expect(
-      sanitizeValues(t, { for: 15, pv: { cur: 3, max: 12 }, classe: 'Ladino', hack: 1, atributos: 'x', des: 'muito', ca: Infinity, agi: 3 }, A),
+      sanitizeValues(t, { for: 15, pv: { cur: 3, max: 12 }, classe: 'Ladino', hack: 1, atributos: 'x', des: 'muito', ca: Infinity, agi: 3 }, TEMPLATE_PRESETS[1].attributes),
     ).toEqual({ for: 15, pv: { cur: 3, max: 12 }, classe: 'Ladino' });
     expect(sanitizeValues(t, null)).toBeNull();
   });
@@ -160,9 +161,42 @@ describe('atributos da campanha', () => {
     const { resolveFormula, TEMPLATE_PRESETS, DEFAULT_ATTRIBUTES } = await import('../src/sheets');
     const t = { ...TEMPLATE_PRESETS[1], id: 't', perm: { view: 'all', move: 'gm', edit: 'gm' }, updatedAt: 0 } as const;
     const tt = JSON.parse(JSON.stringify(t));
-    tt.fields.find((f: { type: string }) => f.type === 'attrs').attrs.push('sorte');
+    // Bloco sem lista: atributo criado depois aparece sozinho.
     const attrs = [...DEFAULT_ATTRIBUTES, { id: 'sorte', label: 'Sorte' }];
     const s = { id: 's', perm: tt.perm, updatedAt: 0, templateId: 't', name: 'X', kind: 'npc' as const, values: {} };
     expect(resolveFormula('1d20+{mod}', s, tt, 'sorte', attrs)).toBe('1d20+0');
+  });
+});
+
+describe('sistemas e campanhas antigas', () => {
+  it('cada sistema traz seus atributos e um modelo de criatura', async () => {
+    const { TEMPLATE_PRESETS, creaturePreset, templateAttrs, presetTemplate } = await import('../src/sheets');
+    const d20 = TEMPLATE_PRESETS[1];
+    expect(d20.attributes!.map((a) => a.id)).toEqual(['for', 'des', 'con', 'int', 'sab', 'car']);
+    const c = creaturePreset(d20);
+    expect(c.hpField).toBe('pv');
+    const t = { ...presetTemplate(c), id: 'c', perm: { view: 'all' as const, move: 'gm' as const, edit: 'gm' as const }, updatedAt: 0 };
+    expect('attributes' in t).toBe(false);
+    expect(templateAttrs(t, d20.attributes!).length).toBe(6);
+  });
+
+  it('atributos soltos viram um bloco e a lista da campanha', async () => {
+    const { migrateTemplate, attributesUsedBy } = await import('../src/sheets');
+    const old = {
+      id: 'o', perm: { view: 'all' as const, move: 'gm' as const, edit: 'gm' as const }, updatedAt: 0, name: 'Antigo', attrMod: 'none' as const,
+      fields: [
+        { id: 'nome2', label: 'Classe', type: 'text' as const },
+        { id: 'forca', label: 'Força', type: 'attr' as const, roll: '1d20+{v}' },
+        { id: 'sorte', label: 'Sorte', type: 'attr' as const },
+        { id: 'pv', label: 'Vida', type: 'resource' as const },
+      ],
+    };
+    const m = migrateTemplate(old)!;
+    expect(m.template.fields.map((f) => f.type)).toEqual(['text', 'attrs', 'resource']);
+    expect(m.template.fields[1].roll).toBe('1d20+{v}');
+    expect(m.defs).toEqual([{ id: 'forca', label: 'Força' }, { id: 'sorte', label: 'Sorte' }]);
+    expect(migrateTemplate(m.template)).toBeNull();
+    const list = attributesUsedBy([m.template], m.defs);
+    expect(list.map((a) => a.id)).toEqual(['forca', 'sorte']);
   });
 });

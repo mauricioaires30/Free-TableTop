@@ -22,7 +22,10 @@
   const sheets = $derived(Object.values(session.docs.sheets).sort((a, b) => a.name.localeCompare(b.name)));
   const pcs = $derived(sheets.filter((s) => s.kind === 'pc'));
   const npcs = $derived(sheets.filter((s) => s.kind === 'npc'));
-  const canCreate = $derived(!!gm || session.settings.allowPlayerSheets);
+  const monsters = $derived(sheets.filter((s) => s.kind === 'monster'));
+  // O jogador não escolhe modelo: a ficha dele segue o que o mestre definiu.
+  const playerTemplate = $derived(session.docs.templates[session.settings.playerTemplateId ?? '']);
+  const canCreate = $derived(!!gm || (session.settings.allowPlayerSheets && !!playerTemplate));
 
   let creating = $state(false);
   let name = $state('');
@@ -39,8 +42,12 @@
   function startCreate() {
     creating = true;
     name = '';
-    templateId = templateId && session.docs.templates[templateId] ? templateId : (templates[0]?.id ?? '');
-    kind = gm ? 'npc' : 'pc';
+    templateId = gm
+      ? templateId && session.docs.templates[templateId]
+        ? templateId
+        : (session.settings.playerTemplateId && session.docs.templates[session.settings.playerTemplateId] ? session.settings.playerTemplateId : (templates[0]?.id ?? ''))
+      : (playerTemplate?.id ?? '');
+    kind = 'pc';
     owner = '';
   }
 
@@ -53,6 +60,14 @@
       session.newSheet(templateId, name);
     }
     creating = false;
+  }
+
+  /** Ao trocar o tipo, sugere o modelo de criatura para NPC/inimigo e o dos jogadores para PJ. */
+  function pickKind(k: Sheet['kind']) {
+    kind = k;
+    const creature = templates.find((t) => /criatura/i.test(t.name));
+    if (k !== 'pc' && creature) templateId = creature.id;
+    else if (k === 'pc' && session.settings.playerTemplateId && session.docs.templates[session.settings.playerTemplateId]) templateId = session.settings.playerTemplateId;
   }
 
   function ownerName(s: Sheet) {
@@ -91,6 +106,7 @@
 <div class="panel">
   <div class="row top">
     {#if canCreate}<button class="primary" onclick={startCreate} disabled={!templates.length}>+ Nova ficha</button>{/if}
+    {#if !gm && session.settings.allowPlayerSheets && !playerTemplate}<span class="muted">O mestre ainda não escolheu o modelo das fichas.</span>{/if}
     {#if gm}<button onclick={onTemplates}>Modelos de ficha…</button>{/if}
   </div>
 
@@ -99,15 +115,16 @@
       <label for="sn">Nome</label>
       <!-- svelte-ignore a11y_autofocus -->
       <input id="sn" bind:value={name} maxlength="60" autofocus onkeydown={(e) => e.key === 'Enter' && create()} />
-      <label for="st">Modelo</label>
-      <select id="st" bind:value={templateId}>
-        {#each templates as t (t.id)}<option value={t.id}>{t.name}</option>{/each}
-      </select>
       {#if gm}
         <label for="sk">Tipo</label>
-        <select id="sk" bind:value={kind}>
-          <option value="pc">Personagem de jogador</option>
-          <option value="npc">NPC / criatura (oculto dos jogadores)</option>
+        <select id="sk" value={kind} onchange={(e) => pickKind(e.currentTarget.value as Sheet['kind'])}>
+          <option value="pc">Personagem de jogador (um token)</option>
+          <option value="npc">NPC (um token, oculto dos jogadores)</option>
+          <option value="monster">Inimigo / criatura (vários tokens, cada um com sua vida)</option>
+        </select>
+        <label for="st">Modelo</label>
+        <select id="st" bind:value={templateId}>
+          {#each templates as t (t.id)}<option value={t.id}>{t.name}</option>{/each}
         </select>
         {#if kind === 'pc'}
           <label for="so">Dono (vê e edita a ficha)</label>
@@ -135,10 +152,18 @@
   </ul>
 
   {#if npcs.length || gm}
-    <h3>NPCs e criaturas</h3>
+    <h3>NPCs</h3>
     {#if npcs.length === 0}<p class="muted">Crie NPCs com "+ Nova ficha". Ficam ocultos até você liberar.</p>{/if}
     <ul>
       {#each npcs as s (s.id)}{@render row(s)}{/each}
+    </ul>
+  {/if}
+
+  {#if monsters.length || gm}
+    <h3>Inimigos</h3>
+    {#if monsters.length === 0}<p class="muted">Uma ficha de inimigo vira quantos tokens você quiser (🪙), cada um com a própria vida.</p>{/if}
+    <ul>
+      {#each monsters as s (s.id)}{@render row(s)}{/each}
     </ul>
   {/if}
 </div>

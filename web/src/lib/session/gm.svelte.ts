@@ -5,7 +5,8 @@ import {
   FormulaError, itemForPlayer, logVisibleTo, newInvite, newItemId, parsePlayerIntent, PROTOCOL_VERSION,
   resolveFormula, rollDice, sanitizeValues, SHEET_PERM, sortEntries, stepTurn, TEMPLATE_PERM, TEMPLATE_PRESETS,
   TRANSFORM_FIELDS, WordFilter, DEFAULT_TABLES, TABLE_PERM, NOTE_PERM, rollTable as rollRandomTable, logToJournal,
-  MAX_NOTE_TEXT, AVATAR_SIDE, MAX_AVATAR_BYTES, playerOwnsItem, DEFAULT_ATTRIBUTES, templateAttrs,
+  MAX_NOTE_TEXT, AVATAR_SIDE, MAX_AVATAR_BYTES, playerOwnsItem, templateAttrs, creaturePreset, presetTemplate, migrateTemplate,
+  attributesUsedBy, fieldIdFromLabel, type Preset,
   type Actor, type AnyDoc, type BoardItem, type Collection, type Combat, type CombatEntry, type DocMap,
   type EditPatch, type FieldValue, type FilterConfig, type GmMessage, type LogEntry, type Peer, type Perm,
   type PlayerIntent, type RelayToClient, type Roster, type Sheet, type SheetTemplate, type TableSettings,
@@ -66,7 +67,8 @@ export class GmSession extends TableSession {
     const combat = await readCombat(store);
     const map = await readMap(store);
     const s = new GmSession(store, campaign, items, recent, today, docs, combat, map);
-    if (!campaign.seeded) s.seedTemplates();
+    if (!campaign.seeded) s.seedTemplates(campaign.system);
+    else s.migrate();
     if (!campaign.seededTables) s.seedTables();
     return s;
   }
@@ -619,14 +621,77 @@ export class GmSession extends TableSession {
     return !!r && !r.banned && can(actor, 'edit', doc);
   }
 
-  seedTemplates() {
-    for (const p of TEMPLATE_PRESETS) this.createTemplate(p);
+  /** Cria só o modelo do sistema escolhido (e um de criatura do mesmo sistema), com os atributos dele. */
+  seedTemplates(system?: string) {
+    const p = TEMPLATE_PRESETS.find((x) => x.name === system) ?? TEMPLATE_PRESETS[0];
+    const main = this.createTemplate(p);
+    this.createTemplate(creaturePreset(p));
     this.campaign.seeded = true;
-    this.saveCampaign();
+    delete this.campaign.noAttrList;
+    this.setSettings({ ...($state.snapshot(this.settings) as TableSettings), attributes: structuredClone(p.attributes ?? []), playerTemplateId: main.id });
   }
 
-  createTemplate(base: Omit<SheetTemplate, 'id' | 'perm' | 'updatedAt'> = TEMPLATE_PRESETS[0]): SheetTemplate {
-    const plain = structuredClone($state.snapshot(base)) as Omit<SheetTemplate, 'id' | 'perm' | 'updatedAt'>;
+  /** Atualiza campanhas de versões antigas (atributos soltos, lista de atributos, modelo dos jogadores). */
+  migrate() {
+    const extra: AttributeDef[] = [];
+    for (const t of Object.values(this.docs.templates)) {
+      const m = migrateTemplate($state.snapshot(t) as SheetTemplate);
+      if (!m) continue;
+      extra.push(...m.defs);
+      this.putDoc('templates', { ...m.template, updatedAt: Date.now() });
+    }
+    const settings = $state.snapshot(this.settings) as TableSettings;
+    let changed = false;
+    if (this.campaign.noAttrList) {
+      settings.attributes = attributesUsedBy(Object.values($state.snapshot(this.docs.templates) as Record<string, SheetTemplate>), extra);
+      delete this.campaign.noAttrList;
+      changed = true;
+    } else {
+      for (const d of extra) {
+        if (!settings.attributes.some((a) => a.id === d.id)) {
+          settings.attributes.push(d);
+          changed = true;
+        }
+      }
+    }
+    if (!settings.playerTemplateId || !this.docs.templates[settings.playerTemplateId]) {
+      // O modelo mais usado pelas fichas dos jogadores (ou o primeiro que não é de criatura).
+      const count = new Map<string, number>();
+      for (const s of Object.values(this.docs.sheets)) if (s.kind === 'pc') count.set(s.templateId, (count.get(s.templateId) ?? 0) + 1);
+      const ts = Object.values(this.docs.templates);
+      const best = [...count].filter(([id]) => this.docs.templates[id]).sort((a, b) => b[1] - a[1])[0]?.[0];
+      const pick = best ?? (ts.find((t) => t.name === 'Genérico') ?? ts.find((t) => !/criatura/i.test(t.name)) ?? ts[0])?.id;
+      if (pick) {
+        settings.playerTemplateId = pick;
+        changed = true;
+      }
+    }
+    if (changed) this.setSettings(settings);
+  }
+
+  /** Atributo novo na campanha: entra também nos modelos que escolhem atributos um a um. */
+  addAttribute(label: string) {
+    const l = label.trim().slice(0, 30);
+    if (!l) return;
+    const attrs = this.attrs;
+    const taken = new Set([...attrs.map((a) => a.id), ...Object.values(this.docs.templates).flatMap((t) => t.fields.map((f) => f.id))]);
+    const def = { id: fieldIdFromLabel(l, taken), label: l };
+    for (const t of Object.values(this.docs.templates)) {
+      if (!t.fields.some((f) => f.type === 'attrs' && f.attrs?.length)) continue;
+      const copy = structuredClone($state.snapshot(t)) as SheetTemplate;
+      for (const f of copy.fields) if (f.type === 'attrs' && f.attrs?.length) f.attrs.push(def.id);
+      this.putDoc('templates', { ...copy, updatedAt: Date.now() });
+    }
+    this.setSettings({ ...($state.snapshot(this.settings) as TableSettings), attributes: [...attrs, def] });
+  }
+
+  createTemplate(base: Preset = TEMPLATE_PRESETS[0]): SheetTemplate {
+    // Modelo pronto traz os atributos do sistema dele para a campanha (os que faltarem).
+    const missing = (base.attributes ?? []).filter((d) => !this.attrs.some((a) => a.id === d.id));
+    if (missing.length && this.campaign.seeded) {
+      this.setSettings({ ...($state.snapshot(this.settings) as TableSettings), attributes: [...this.attrs, ...structuredClone(missing)] });
+    }
+    const plain = presetTemplate($state.snapshot(base) as Preset);
     const t: SheetTemplate = { ...plain, id: newItemId(), perm: structuredClone(TEMPLATE_PERM), updatedAt: Date.now() };
     this.putDoc('templates', t);
     return t;
@@ -678,15 +743,16 @@ export class GmSession extends TableSession {
     }
   }
 
-  private playerNewSheet(actor: Actor, templateId: string, name: string) {
+  private playerNewSheet(actor: Actor, _templateId: string, name: string) {
     if (!this.settings.allowPlayerSheets) return this.notify(actor, 'O mestre não permite criar fichas nesta mesa.');
-    const t = this.docs.templates[templateId];
-    if (!t || !can(actor, 'view', t)) return this.notify(actor, 'Modelo de ficha não encontrado.');
+    // O jogador não escolhe o modelo: usa o que o mestre definiu na aba Mesa.
+    const t = this.docs.templates[this.settings.playerTemplateId ?? ''];
+    if (!t) return this.notify(actor, 'O mestre ainda não escolheu o modelo das fichas.');
     const owned = Object.values(this.docs.sheets).filter((s) => s.perm.owner === actor.pid).length;
     if (owned >= MAX_PLAYER_SHEETS) return this.notify(actor, `Limite de ${MAX_PLAYER_SHEETS} fichas por jogador.`);
     const f = applyFilter(this.filter, name, this.wf);
     if (!f.ok) return this.notify(actor, f.reason);
-    const s = this.createSheet({ templateId, name: f.text, kind: 'pc', owner: actor.pid });
+    const s = this.createSheet({ templateId: t.id, name: f.text, kind: 'pc', owner: actor.pid });
     if (s) this.toast(`${this.nameOf(actor.pid)} criou a ficha "${s.name}".`);
   }
 
@@ -730,7 +796,7 @@ export class GmSession extends TableSession {
 
   /** Atributos que existem nesta campanha (definidos pelo mestre na aba Mesa). */
   private get attrs(): AttributeDef[] {
-    return $state.snapshot(this.settings.attributes ?? DEFAULT_ATTRIBUTES) as AttributeDef[];
+    return $state.snapshot(this.settings.attributes ?? []) as AttributeDef[];
   }
 
   private formula(actor: Actor, sheet: Sheet, formula: string, fieldId?: string): string | null {
@@ -1230,6 +1296,7 @@ export class GmSession extends TableSession {
         roster: $state.snapshot(this.roster),
         settings: $state.snapshot(this.settings),
       };
+      delete c.noAttrList;
       this.campaign = c;
       return this.store.writeText(PATHS.campaign, JSON.stringify(c, null, 2));
     });
