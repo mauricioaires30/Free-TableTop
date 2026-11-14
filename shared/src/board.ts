@@ -37,6 +37,11 @@ export interface BoardItem {
   name?: string;
   sheetId?: string;
   conditions?: string[];
+  /**
+   * token: vida mostrada em cima do token. Inimigos guardam aqui a própria vida
+   * (cada token do mesmo inimigo tem a sua); para PJ o mestre preenche a partir da ficha.
+   */
+  hp?: { cur: number; max: number };
   /** clock: relógio de progresso com N fatias, `filled` preenchidas. */
   segments?: number;
   filled?: number;

@@ -34,16 +34,21 @@ const MIN_SIZE: Record<BoardItem['type'], { w: number; h: number }> = {
   clock: { w: 60, h: 60 },
 };
 const CURSOR_PATH = 'M0 0 L0 17 L4.5 13 L7.5 20 L10.5 18.8 L7.6 12 L13 12 Z';
+const EYE_PATH = 'M-8 0 C-5 -5.5 5 -5.5 8 0 C5 5.5 -5 5.5 -8 0 Z';
 const SQRT3 = Math.sqrt(3);
 
 export class BoardRenderer {
   readonly stage: Konva.Stage;
   private itemsLayer = new Konva.Layer();
   private fogLayer = new Konva.Layer({ listening: false });
+  /** Enfeites dos itens que ficam sempre na horizontal (vida, nome, condições, olho). */
+  private hudLayer = new Konva.Layer();
   private overlay = new Konva.Layer({ listening: false });
   private tr: Konva.Transformer;
   private gridShape: Konva.Shape;
   private nodes = new Map<string, Konva.Group>();
+  private huds = new Map<string, Konva.Group>();
+  private eyes = new Set<Konva.Group>();
   private cursorNodes = new Map<string, Konva.Group>();
   private rulerNodes = new Map<string, Konva.Group>();
   private pingNodes = new Map<object, Konva.Circle>();
@@ -86,7 +91,7 @@ export class BoardRenderer {
     });
     this.gridShape = new Konva.Shape({ listening: false, sceneFunc: (ctx) => this.drawGrid(ctx) });
     this.itemsLayer.add(this.gridShape, this.tr);
-    this.stage.add(this.itemsLayer, this.fogLayer, this.overlay);
+    this.stage.add(this.itemsLayer, this.hudLayer, this.fogLayer, this.overlay);
     this.stage.position({ x: this.stage.width() / 2, y: this.stage.height() / 2 });
 
     this.bindStage();
@@ -111,6 +116,7 @@ export class BoardRenderer {
     const sel = tool === 'select';
     this.stage.draggable(sel);
     this.itemsLayer.listening(sel);
+    this.hudLayer.listening(sel);
     if (!sel) this.select(null);
     this.container.style.cursor = sel ? '' : 'crosshair';
   }
@@ -427,6 +433,9 @@ export class BoardRenderer {
         g = this.create(item);
         this.nodes.set(item.id, g);
         this.itemsLayer.add(g);
+        const hud = new Konva.Group({ listening: false });
+        this.huds.set(item.id, hud);
+        this.hudLayer.add(hud);
       }
       this.update(g, item);
       // O grid fica logo acima da camada do mapa.
@@ -435,17 +444,28 @@ export class BoardRenderer {
         gridPlaced = true;
       }
       g.moveToTop();
+      this.huds.get(item.id)?.moveToTop();
     }
     if (!gridPlaced) this.gridShape.moveToTop();
     for (const [id, g] of this.nodes) {
       if (seen.has(id)) continue;
       g.destroy();
       this.nodes.delete(id);
+      this.destroyHud(id);
       if (this.selected === id) this.select(null);
     }
     if (this.selected) this.select(this.selected);
     this.tr.moveToTop();
     this.itemsLayer.batchDraw();
+    this.hudLayer.batchDraw();
+  }
+
+  private destroyHud(id: string) {
+    const hud = this.huds.get(id);
+    if (!hud) return;
+    hud.find('.eye').forEach((e) => this.eyes.delete(e as Konva.Group));
+    hud.destroy();
+    this.huds.delete(id);
   }
 
   private rebuildAll() {
@@ -455,6 +475,7 @@ export class BoardRenderer {
     }
     this.tr.forceUpdate();
     this.itemsLayer.batchDraw();
+    this.hudLayer.batchDraw();
   }
 
   private create(item: BoardItem): Konva.Group {
@@ -557,6 +578,7 @@ export class BoardRenderer {
     const gm = this.s.role === 'gm';
     const hidden = gm && isHiddenFromPlayers(item);
     g.opacity(hidden ? 0.55 : 1);
+    const hud = this.prepareHud(g, item, w, h);
     const shadow = { shadowColor: '#000', shadowBlur: 14, shadowOpacity: 0.45, shadowOffset: { x: 0, y: 4 } };
     // Texto fica num grupo recortado para nunca vazar do item.
     const clip = () => new Konva.Group({ clip: { x: 0, y: 0, width: w, height: h } });
@@ -564,17 +586,17 @@ export class BoardRenderer {
     if (item.type === 'note') {
       g.add(new Konva.Rect({ width: w, height: h, fill: item.color ?? '#f5e6a8', cornerRadius: 3, ...shadow }));
       g.add(clip().add(new Konva.Text({
-        x: 14, y: 14, width: Math.max(10, w - 28), height: Math.max(10, h - 28), text: item.text ?? '',
+        x: 14, y: 14, width: Math.max(10, w - 28), height: Math.max(10, h - 28), text: this.s.clean(item.text ?? ''),
         fontFamily: 'Patrick Hand, cursive', fontSize: 22, lineHeight: 1.15, fill: '#2b2620', ellipsis: true,
       })));
     } else if (item.type === 'card') {
       const showBack = item.back !== undefined && (item.revealed || gm);
       g.add(new Konva.Rect({ width: w, height: h, fill: item.color ?? '#efe4cc', stroke: '#6b1d1d', strokeWidth: 2, cornerRadius: 8, ...shadow }));
-      let body = item.front ?? '';
-      if (showBack) body += `\n\n— ${item.revealed ? 'revelado' : 'verso (só você vê)'} —\n${item.back}`;
+      let body = this.s.clean(item.front ?? '');
+      if (showBack) body += `\n\n— ${item.revealed ? 'revelado' : 'verso (só você vê)'} —\n${this.s.clean(item.back ?? '')}`;
       g.add(clip().add(
         new Konva.Text({
-          x: 16, y: 14, width: Math.max(10, w - 32), text: item.title ?? '', fontFamily: 'Special Elite, monospace',
+          x: 16, y: 14, width: Math.max(10, w - 32), text: this.s.clean(item.title ?? ''), fontFamily: 'Special Elite, monospace',
           fontSize: 22, fill: '#6b1d1d', ellipsis: true, wrap: 'none',
         }),
         new Konva.Line({ points: [16, 48, w - 16, 48], stroke: '#6b1d1d', strokeWidth: 1, opacity: 0.5 }),
@@ -596,38 +618,72 @@ export class BoardRenderer {
         }));
       }
     } else if (item.type === 'token') {
-      this.buildToken(g, item, w, h);
+      this.buildToken(g, hud, item, w, h);
     } else if (item.type === 'clock') {
-      this.buildClock(g, item, w, h);
+      this.buildClock(g, hud, item, w, h);
     }
 
-    if (hidden) {
-      g.add(new Konva.Label({ x: 0, y: -26 }).add(
-        new Konva.Tag({ fill: '#000', opacity: 0.7, cornerRadius: 4 }),
-        new Konva.Text({ text: '👁 oculto dos jogadores', fontSize: 12, padding: 5, fill: '#ddd' }),
-      ));
-    }
-    if (gm && (item.type === 'note' || item.type === 'card')) {
-      const eye = new Konva.Group({ x: 18, y: 18 });
-      eye.add(
-        new Konva.Circle({ radius: 11, fill: 'rgba(0,0,0,0.55)' }),
-        new Konva.Text({ text: hidden ? '🙈' : '👁', fontSize: 13, align: 'center', verticalAlign: 'middle', offsetX: 7, offsetY: 7, width: 14, height: 14 }),
-      );
-      eye.on('mousedown touchstart', (e) => {
-        e.cancelBubble = true; // não inicia o arrasto da nota/carta ao clicar no olho
-      });
-      eye.on('click tap', (e) => {
-        e.cancelBubble = true;
-        this.cb.onToggleVisibility(item.id);
-      });
-      g.add(eye);
-    }
+    if (gm) hud.add(this.makeEye(item.id, w / 2, -h / 2, hidden));
     if (gm && item.locked && layerOf(item) !== 'map') {
       g.add(new Konva.Text({ x: 4, y: 4, text: '📌', fontSize: 14 }));
     }
   }
 
-  private buildToken(g: Konva.Group, item: BoardItem, w: number, h: number) {
+  /** Grupo do HUD do item: fica no centro do item, sem girar junto. */
+  private prepareHud(g: Konva.Group, item: BoardItem, w: number, h: number): Konva.Group {
+    let hud = this.huds.get(item.id);
+    if (!hud) {
+      hud = new Konva.Group({ listening: false });
+      this.huds.set(item.id, hud);
+      this.hudLayer.add(hud);
+    }
+    hud.find('.eye').forEach((e) => this.eyes.delete(e as Konva.Group));
+    hud.destroyChildren();
+    hud.listening(this.s.role === 'gm');
+    hud.opacity(g.opacity());
+    hud.visible(g.visible());
+    this.placeHud(g, hud, w, h);
+    return hud;
+  }
+
+  private placeHud(g: Konva.Group, hud: Konva.Group, w = g.width(), h = g.height()): boolean {
+    const c = g.getTransform().point({ x: w / 2, y: h / 2 });
+    if (Math.abs(hud.x() - c.x) < 0.01 && Math.abs(hud.y() - c.y) < 0.01) return false;
+    hud.position(c);
+    return true;
+  }
+
+  /** Botão do olho (só o mestre): mostra/esconde o item dos jogadores. Tamanho fixo na tela. */
+  private makeEye(id: string, x: number, y: number, hidden: boolean): Konva.Group {
+    const inv = 1 / this.stage.scaleX();
+    const eye = new Konva.Group({ x, y, name: 'eye', scaleX: inv, scaleY: inv });
+    const color = hidden ? '#e8a0a0' : '#f1e3c0';
+    eye.add(
+      new Konva.Circle({ radius: 14, fill: hidden ? '#3a1414' : '#1c1a17', stroke: '#c9a45c', strokeWidth: 1.5, shadowColor: '#000', shadowBlur: 6, shadowOpacity: 0.6 }),
+      new Konva.Path({ data: EYE_PATH, stroke: color, strokeWidth: 1.6, listening: false }),
+      new Konva.Circle({ radius: 2.6, fill: color, listening: false }),
+    );
+    if (hidden) eye.add(new Konva.Line({ points: [-8, 7, 8, -7], stroke: color, strokeWidth: 2, lineCap: 'round', listening: false }));
+    eye.on('mouseenter', () => (this.container.style.cursor = 'pointer'));
+    eye.on('mouseleave', () => (this.container.style.cursor = this.tool === 'select' ? '' : 'crosshair'));
+    eye.on('mousedown touchstart', (e) => {
+      e.cancelBubble = true; // não arrasta o item nem o quadro
+      this.stage.draggable(false);
+      setTimeout(() => this.stage.draggable(this.tool === 'select'), 0);
+    });
+    eye.on('click tap', (e) => {
+      e.cancelBubble = true;
+      this.cb.onToggleVisibility(id);
+    });
+    eye.on('dblclick dbltap contextmenu', (e) => {
+      e.cancelBubble = true;
+      e.evt.preventDefault();
+    });
+    this.eyes.add(eye);
+    return eye;
+  }
+
+  private buildToken(g: Konva.Group, hud: Konva.Group, item: BoardItem, w: number, h: number) {
     const r = Math.min(w, h) / 2;
     const sheet = item.sheetId ? this.s.docs.sheets[item.sheetId] : undefined;
     const ring = item.color ?? (sheet?.perm.owner ? colorFor(sheet.perm.owner) : sheet?.kind === 'npc' ? '#c0392b' : '#d9a75b');
@@ -652,39 +708,52 @@ export class BoardRenderer {
     }
     g.add(new Konva.Circle({ x: r, y: r, radius: r - ringW / 2, stroke: ring, strokeWidth: ringW }));
 
-    // Vida (só se a ficha ligada chegou até este navegador).
-    const hp = sheet ? hpOf(sheet, this.s.templateOf(sheet)) : null;
+    // HUD do token (no centro, sempre na horizontal): vida em cima, nome e condições embaixo.
+    const hp = this.tokenHp(item);
     if (hp && hp.max > 0) {
       const ratio = Math.max(0, Math.min(1, hp.cur / hp.max));
       const color = ratio > 0.5 ? '#4caf7a' : ratio > 0.25 ? '#e0a43a' : '#e05252';
-      g.add(new Konva.Rect({ x: 0, y: -10, width: r * 2, height: 6, fill: '#000', opacity: 0.7, cornerRadius: 3 }));
-      g.add(new Konva.Rect({ x: 0, y: -10, width: r * 2 * ratio, height: 6, fill: color, cornerRadius: 3 }));
+      const bw = Math.max(44, r * 2);
+      const y = -r - 16;
+      hud.add(new Konva.Rect({ x: -bw / 2, y, width: bw, height: 12, fill: '#120f0c', opacity: 0.85, cornerRadius: 6, stroke: '#c9a45c', strokeWidth: 1 }));
+      if (ratio > 0) hud.add(new Konva.Rect({ x: -bw / 2 + 1.5, y: y + 1.5, width: (bw - 3) * ratio, height: 9, fill: color, cornerRadius: 4.5 }));
+      hud.add(new Konva.Text({
+        x: -bw / 2, y: y + 0.5, width: bw, height: 12, align: 'center', verticalAlign: 'middle', text: `${hp.cur}/${hp.max}`,
+        fontSize: 10, fontStyle: 'bold', fill: '#fff', fontFamily: 'Inter, sans-serif', shadowColor: '#000', shadowBlur: 2, shadowOpacity: 1,
+      }));
     }
 
     const label = item.name ?? sheet?.name;
     if (label) {
-      const lbl = new Konva.Label({ y: r * 2 + 4 });
+      const lbl = new Konva.Label({ y: r + 4 });
       lbl.add(
         new Konva.Tag({ fill: '#000', opacity: 0.65, cornerRadius: 4 }),
-        new Konva.Text({ text: label, fontSize: 12, padding: 3, fill: '#fff', fontFamily: 'Inter, sans-serif' }),
+        new Konva.Text({ text: this.s.clean(label), fontSize: 12, padding: 3, fill: '#fff', fontFamily: 'Inter, sans-serif' }),
       );
-      lbl.x(r - lbl.width() / 2);
-      g.add(lbl);
+      lbl.x(-lbl.width() / 2);
+      hud.add(lbl);
     }
     const conds = item.conditions ?? [];
     if (conds.length) {
-      const c = new Konva.Label({ y: r * 2 + (label ? 24 : 4) });
+      const c = new Konva.Label({ y: r + (label ? 24 : 4) });
       c.add(
         new Konva.Tag({ fill: '#6b1d1d', opacity: 0.9, cornerRadius: 4 }),
         new Konva.Text({ text: conds.join(' · '), fontSize: 11, padding: 3, fill: '#ffe1e1', fontFamily: 'Inter, sans-serif' }),
       );
-      c.x(r - c.width() / 2);
-      g.add(c);
+      c.x(-c.width() / 2);
+      hud.add(c);
     }
   }
 
+  /** Vida do token: inimigos guardam a própria vida; PJ/NPC usam a ficha (ou o que o mestre mandou). */
+  private tokenHp(item: BoardItem): { cur: number; max: number } | null {
+    const sheet = item.sheetId ? this.s.docs.sheets[item.sheetId] : undefined;
+    if (sheet && sheet.kind !== 'monster') return hpOf(sheet, this.s.templateOf(sheet)) ?? item.hp ?? null;
+    return item.hp ?? null;
+  }
+
   /** Relógio de progresso: fatias preenchidas no sentido horário a partir do topo. */
-  private buildClock(g: Konva.Group, item: BoardItem, w: number, h: number) {
+  private buildClock(g: Konva.Group, hud: Konva.Group, item: BoardItem, w: number, h: number) {
     const n = Math.max(2, Math.min(24, item.segments ?? 6));
     const filled = Math.max(0, Math.min(n, item.filled ?? 0));
     const r = Math.min(w, h) / 2;
@@ -697,13 +766,13 @@ export class BoardRenderer {
       }));
     }
     g.add(new Konva.Circle({ x: r, y: r, radius: r - 2, stroke: filled === n ? color : '#ebe5d8', strokeWidth: 3 }));
-    const lbl = new Konva.Label({ y: r * 2 + 6 });
+    const lbl = new Konva.Label({ y: r + 6 });
     lbl.add(
       new Konva.Tag({ fill: '#000', opacity: 0.7, cornerRadius: 4 }),
-      new Konva.Text({ text: `${item.title ?? 'Relógio'} · ${filled}/${n}`, fontSize: 13, padding: 4, fill: '#fff', fontFamily: 'Inter, sans-serif' }),
+      new Konva.Text({ text: `${this.s.clean(item.title ?? 'Relógio')} · ${filled}/${n}`, fontSize: 13, padding: 4, fill: '#fff', fontFamily: 'Inter, sans-serif' }),
     );
-    lbl.x(r - lbl.width() / 2);
-    g.add(lbl);
+    lbl.x(-lbl.width() / 2);
+    hud.add(lbl);
   }
 
   private async loadImage(hash: string) {
@@ -816,6 +885,20 @@ export class BoardRenderer {
     }
 
     if (changed) this.overlay.batchDraw();
+
+    // HUD dos itens acompanha posição (arrasto, giro) e o olho fica do mesmo tamanho na tela.
+    let hudChanged = false;
+    for (const [id, hud] of this.huds) {
+      const g = this.nodes.get(id);
+      if (g && this.placeHud(g, hud)) hudChanged = true;
+    }
+    for (const eye of this.eyes) {
+      if (Math.abs(eye.scaleX() - inv) > 1e-6) {
+        eye.scale({ x: inv, y: inv });
+        hudChanged = true;
+      }
+    }
+    if (hudChanged) this.hudLayer.batchDraw();
     this.raf = requestAnimationFrame(this.tick);
   };
 

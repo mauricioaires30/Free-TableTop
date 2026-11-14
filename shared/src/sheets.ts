@@ -88,7 +88,7 @@ export interface Sheet {
   updatedAt: number;
   templateId: string;
   name: string;
-  kind: 'pc' | 'npc';
+  kind: SheetKind;
   values: Record<string, FieldValue>;
   color?: string;
   /** Imagem do personagem (hash em imagens/), usada na ficha e no token. */
@@ -96,6 +96,9 @@ export interface Sheet {
 }
 
 /** Ficha de um jogador (tem dono): quem mexe nela é o dono. */
+/** pc: personagem de jogador; npc: um token só; monster: inimigo, gera vários tokens. */
+export type SheetKind = 'pc' | 'npc' | 'monster';
+
 export function isPlayerSheet(s: Pick<Sheet, 'kind' | 'perm'>): boolean {
   return s.kind === 'pc' && !!s.perm.owner;
 }

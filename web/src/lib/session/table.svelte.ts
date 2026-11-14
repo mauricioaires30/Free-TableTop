@@ -88,6 +88,11 @@ export abstract class TableSession {
     return this.roster[pid]?.name ?? this.peers.find((p) => p.pid === pid)?.name ?? 'Jogador';
   }
 
+  /** Texto como esta pessoa quer ver (palavrões escondidos ou não). */
+  clean(text: string): string {
+    return text;
+  }
+
   isOnline(pid: string): boolean {
     return this.peers.some((p) => p.pid === pid);
   }
