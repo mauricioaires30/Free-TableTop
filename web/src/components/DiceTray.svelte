@@ -168,7 +168,7 @@
     {#if unseen}<span class="badge">{unseen > 9 ? '9+' : unseen}</span>{/if}
   </button>
 {:else}
-  <section class="tray" aria-label="Bandeja de dados">
+  <section class="tray parchment" aria-label="Bandeja de dados">
     <header>
       <strong>Dados</strong>
       <button class="ghost icon" onclick={() => (open = false)} aria-label="Fechar bandeja">✕</button>
@@ -295,10 +295,7 @@
     max-height: calc(100% - 24px);
     display: flex;
     flex-direction: column;
-    background: rgba(22, 25, 32, 0.97);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    box-shadow: 0 16px 44px rgba(0, 0, 0, 0.55);
+    border-radius: 4px;
     z-index: 4;
   }
   header {

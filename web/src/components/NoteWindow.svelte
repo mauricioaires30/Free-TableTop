@@ -87,7 +87,7 @@
 </script>
 
 {#if doc}
-  <section class="win" style:left="{pos.x}px" style:top="{pos.y}px" style:z-index={z} onpointerdown={onFocus} aria-label={doc.title}>
+  <section class="win parchment" style:left="{pos.x}px" style:top="{pos.y}px" style:z-index={z} onpointerdown={onFocus} aria-label={doc.title}>
     <header onpointerdown={down} onpointermove={move} onpointerup={() => (drag = null)}>
       <span class="kind">{col === 'journal' ? '📓' : '📖'}</span>
       {#if editable}
@@ -144,10 +144,7 @@
     max-height: calc(100vh - 90px);
     display: flex;
     flex-direction: column;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+    border-radius: 4px;
   }
   header {
     display: flex;

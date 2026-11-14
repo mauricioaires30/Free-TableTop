@@ -623,7 +623,8 @@ export class BoardRenderer {
       this.buildClock(g, hud, item, w, h);
     }
 
-    if (gm) hud.add(this.makeEye(item.id, w / 2, -h / 2, hidden));
+    // Token: olho ao lado (a vida fica em cima); resto: canto de cima à direita.
+    if (gm) hud.add(item.type === 'token' ? this.makeEye(item.id, Math.min(w, h) / 2 + 4, 0, hidden) : this.makeEye(item.id, w / 2, -h / 2, hidden));
     if (gm && item.locked && layerOf(item) !== 'map') {
       g.add(new Konva.Text({ x: 4, y: 4, text: '📌', fontSize: 14 }));
     }

@@ -170,3 +170,86 @@ label {
   gap: 8px;
   margin-top: 18px;
 }
+
+/* ---------- Pergaminho: fichas, notas e bandeja de dados ---------- */
+.parchment {
+  --text: #2e1f0f;
+  --muted: #6f5638;
+  --border: rgba(96, 64, 28, 0.38);
+  --bg: rgba(255, 250, 232, 0.4);
+  --panel: #ead8b0;
+  --panel-2: rgba(122, 84, 38, 0.13);
+  --accent: #8b1e1e;
+  --accent-2: #7a2e12;
+  --ink: #2e1f0f;
+  --font-title: 'Cinzel', 'Special Elite', serif;
+  color: var(--text);
+  color-scheme: light;
+  font-family: 'Crimson Pro', Georgia, 'Times New Roman', serif;
+  font-size: 15px;
+  background-color: #e6d1a3;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .36  0 0 0 0 .23  0 0 0 0 .09  0 0 0 .22 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"),
+    radial-gradient(ellipse at 50% 35%, #f6e9c9 0%, #ecdab0 50%, #d8bd85 100%);
+  border: 1px solid #8a6a3a !important;
+  box-shadow:
+    inset 0 0 36px rgba(118, 74, 22, 0.5),
+    inset 0 0 5px rgba(80, 46, 12, 0.7),
+    0 18px 50px rgba(0, 0, 0, 0.6) !important;
+}
+.parchment input[type='text'],
+.parchment input:not([type]),
+.parchment input[type='number'],
+.parchment textarea,
+.parchment select {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid rgba(96, 64, 28, 0.45);
+  border-radius: 2px;
+  color: var(--ink);
+}
+.parchment textarea {
+  background: repeating-linear-gradient(transparent 0 23px, rgba(96, 64, 28, 0.18) 23px 24px);
+  line-height: 24px;
+}
+.parchment input:focus,
+.parchment textarea:focus,
+.parchment select:focus {
+  border-color: #7a2e12;
+  background-color: rgba(255, 250, 232, 0.35);
+}
+.parchment input:disabled,
+.parchment textarea:disabled {
+  border-bottom-color: transparent;
+  opacity: 1;
+}
+.parchment button {
+  background: rgba(122, 84, 38, 0.1);
+  border-color: rgba(96, 64, 28, 0.4);
+  color: var(--ink);
+}
+.parchment button:hover:not(:disabled) {
+  background: rgba(122, 84, 38, 0.2);
+  border-color: rgba(96, 64, 28, 0.65);
+}
+.parchment button.ghost {
+  background: transparent;
+  border-color: transparent;
+}
+.parchment button.ghost:hover:not(:disabled) {
+  background: rgba(122, 84, 38, 0.15);
+}
+.parchment button.primary {
+  background: radial-gradient(circle at 35% 30%, #b8322a, #7a1414 75%);
+  border-color: #5e0f0f;
+  color: #fbe9d0;
+}
+.parchment input[type='checkbox'] {
+  accent-color: #7a2e12;
+}
+.parchment label {
+  color: var(--muted);
+}
+.parchment ::placeholder {
+  color: rgba(111, 86, 56, 0.6);
+  font-style: italic;
+}
