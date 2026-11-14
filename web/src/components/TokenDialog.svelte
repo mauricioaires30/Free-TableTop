@@ -12,6 +12,11 @@
   let cells = $state(Math.max(0.5, Math.round((item.w / cell) * 2) / 2));
   let sheetId = $state(item.sheetId ?? '');
   let color = $state(item.color ?? '');
+  const linked = $derived(sheetId ? session.docs.sheets[sheetId] : undefined);
+  /** Inimigo (ou token sem ficha): a vida fica no próprio token. */
+  const ownHp = $derived(!linked || linked.kind === 'monster');
+  let hpCur = $state(item.hp?.cur ?? 0);
+  let hpMax = $state(item.hp?.max ?? 0);
 
   const sheets = $derived(Object.values(session.docs.sheets).sort((a, b) => a.name.localeCompare(b.name)));
   /** Condições definidas pelo mestre na aba Mesa. */
@@ -37,6 +42,7 @@
         color: color || undefined,
         w: size,
         h: size,
+        hp: ownHp && hpMax > 0 ? { cur: Math.min(hpMax, Math.round(hpCur)), max: Math.round(hpMax) } : undefined,
       });
     }
     onClose();
@@ -73,7 +79,7 @@
           <label for="ts">Ficha ligada</label>
           <select id="ts" bind:value={sheetId}>
             <option value="">Nenhuma</option>
-            {#each sheets as s (s.id)}<option value={s.id}>{s.name}{s.kind === 'npc' ? ' (NPC)' : ''}</option>{/each}
+            {#each sheets as s (s.id)}<option value={s.id}>{s.name}{s.kind === 'npc' ? ' (NPC)' : s.kind === 'monster' ? ' (inimigo)' : ''}</option>{/each}
           </select>
         </div>
       </div>
@@ -91,7 +97,19 @@
           >
         {/each}
       </div>
-      <p class="muted small">A vida do token vem da barra de vida da ficha ligada.</p>
+      {#if ownHp}
+        <label for="hpc">Vida deste token</label>
+        <div class="row hp">
+          <button class="ghost" onclick={() => (hpCur = Math.max(-999, hpCur - 1))} aria-label="Menos vida">−</button>
+          <input id="hpc" type="number" bind:value={hpCur} aria-label="Vida atual" />
+          <span>/</span>
+          <input type="number" min="0" bind:value={hpMax} aria-label="Vida máxima" />
+          <button class="ghost" onclick={() => (hpCur = Math.min(hpMax, hpCur + 1))} aria-label="Mais vida">+</button>
+        </div>
+        <p class="muted small">Cada token de inimigo tem a própria vida (a ficha dá os atributos e as rolagens).</p>
+      {:else}
+        <p class="muted small">A vida do token vem da barra de vida da ficha ligada.</p>
+      {/if}
     {/if}
 
     <div class="actions">
@@ -141,5 +159,11 @@
   }
   .small {
     font-size: 12px;
+  }
+  .hp {
+    align-items: center;
+  }
+  .hp input {
+    width: 72px;
   }
 </style>

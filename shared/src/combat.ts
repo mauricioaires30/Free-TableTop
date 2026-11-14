@@ -7,6 +7,8 @@ export interface CombatEntry {
   name: string;
   init: number;
   sheetId?: string;
+  /** Token de inimigo (cada token tem a própria vida). */
+  tokenId?: string;
   /** Oculto dos jogadores (ex.: emboscada). */
   hidden?: boolean;
 }

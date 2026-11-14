@@ -6,7 +6,7 @@ import {
   resolveFormula, rollDice, sanitizeValues, SHEET_PERM, sortEntries, stepTurn, TEMPLATE_PERM, TEMPLATE_PRESETS,
   TRANSFORM_FIELDS, WordFilter, DEFAULT_TABLES, TABLE_PERM, NOTE_PERM, rollTable as rollRandomTable, logToJournal,
   MAX_NOTE_TEXT, AVATAR_SIDE, MAX_AVATAR_BYTES, playerOwnsItem, templateAttrs, creaturePreset, presetTemplate, migrateTemplate,
-  attributesUsedBy, fieldIdFromLabel, type Preset,
+  attributesUsedBy, fieldIdFromLabel, type Preset, hpOf, isPlayerSheet,
   type Actor, type AnyDoc, type BoardItem, type Collection, type Combat, type CombatEntry, type DocMap,
   type EditPatch, type FieldValue, type FilterConfig, type GmMessage, type LogEntry, type Peer, type Perm,
   type PlayerIntent, type RelayToClient, type Roster, type Sheet, type SheetTemplate, type TableSettings,
@@ -245,7 +245,7 @@ export class GmSession extends TableSession {
 
   private sendSnapshot(pid: string) {
     const actor: Actor = { role: 'player', pid };
-    const items = [...this.items.values()].map((i) => itemForPlayer(i, actor)).filter((i): i is BoardItem => !!i);
+    const items = [...this.items.values()].map((i) => this.itemFor(i, actor)).filter((i): i is BoardItem => !!i);
     let log = $state.snapshot(this.log).filter((e) => logVisibleTo(e, pid)).slice(-150);
     const msg = (): GmMessage => ({
       k: 'snapshot', campaign: this.campaignName, items, log, roster: this.publicRoster(), filter: $state.snapshot(this.filter),
@@ -275,14 +275,46 @@ export class GmSession extends TableSession {
   /** Envia o item a cada jogador conectado, já filtrado (ou manda remover, se ele não pode mais ver). */
   private broadcastItem(item: BoardItem) {
     for (const p of this.peers) {
-      const v = itemForPlayer(item, { role: 'player', pid: p.pid });
+      const v = this.itemFor(item, { role: 'player', pid: p.pid });
       this.sendTo(p.pid, v ? { k: 'item', item: v } : { k: 'remove', id: item.id });
     }
   }
 
+  /**
+   * Item como o jogador recebe. Tokens levam a vida para mostrar em cima deles:
+   * sempre a dos personagens de jogador; a de NPCs e inimigos só se o mestre liberar.
+   * Também levam a imagem da ficha ligada, mesmo que o jogador não veja a ficha.
+   */
+  private itemFor(item: BoardItem, actor: Actor): BoardItem | null {
+    const v = itemForPlayer(item, actor);
+    if (!v || actor.role === 'gm' || v.type !== 'token') return v;
+    const copy: BoardItem = { ...v };
+    delete copy.hp;
+    const sheet = v.sheetId ? this.docs.sheets[v.sheetId] : undefined;
+    const show = !!this.settings.showNpcHp;
+    if (!sheet || sheet.kind === 'monster') {
+      if (show && item.hp) copy.hp = { ...item.hp };
+    } else if (isPlayerSheet(sheet) || show) {
+      const hp = hpOf(sheet, this.templateOf(sheet));
+      if (hp) copy.hp = { cur: hp.cur, max: hp.max };
+    }
+    if (sheet && !copy.img && sheet.avatar && !can(actor, 'view', sheet)) copy.img = sheet.avatar;
+    return copy;
+  }
+
+  /** Reenvia os tokens ligados a uma ficha (a vida dela mudou). */
+  private lastHp = new Map<string, string>();
+  private refreshTokens(sheetId: string) {
+    const sheet = this.docs.sheets[sheetId];
+    const hp = sheet ? JSON.stringify(hpOf(sheet, this.templateOf(sheet))) + (sheet.avatar ?? '') : '';
+    if (this.lastHp.get(sheetId) === hp) return;
+    this.lastHp.set(sheetId, hp);
+    for (const i of this.items.values()) if (i.type === 'token' && i.sheetId === sheetId) this.broadcastItem(i);
+  }
+
   private async sendImage(actor: Actor, hash: string) {
     const allowed =
-      [...this.items.values()].some((i) => i.img === hash && itemForPlayer(i, actor)) ||
+      [...this.items.values()].some((i) => this.itemFor(i, actor)?.img === hash) ||
       Object.values(this.docs.sheets).some((s) => s.avatar === hash && can(actor, 'view', s));
     if (!allowed) return this.sendTo(actor.pid, { k: 'imgMissing', hash });
     const chunks = await this.images.chunks(hash);
@@ -573,7 +605,10 @@ export class GmSession extends TableSession {
   // ---------- documentos: modelos e fichas ----------
 
   private saveDoc(col: Collection, id: string) {
-    if (col === 'sheets') this.bump();
+    if (col === 'sheets') {
+      this.bump();
+      this.refreshTokens(id);
+    }
     this.saver.schedule(`${col}/${id}`, async () => {
       const d = this.docs[col][id];
       if (d) await this.store.writeText(docPath(col, id), JSON.stringify($state.snapshot(d), null, 1));
@@ -844,14 +879,14 @@ export class GmSession extends TableSession {
     if (!t?.initiative) return this.notify(actor, 'O modelo desta ficha não tem fórmula de iniciativa.');
     const expr = this.formula(actor, sheet, t.initiative);
     if (!expr) return;
-    const secret = actor.role === 'gm' && sheet.kind === 'npc';
+    const secret = actor.role === 'gm' && sheet.kind !== 'pc';
     const roll = this.doRoll(actor, expr, secret, `${sheet.name}: Iniciativa`);
     if (roll) this.upsertCombatant(sheet, roll.total);
   }
 
   private upsertCombatant(sheet: Sheet, init: number) {
     const entries = $state.snapshot(this.combat.entries) as CombatEntry[];
-    const e = entries.find((x) => x.sheetId === sheet.id);
+    const e = entries.find((x) => x.sheetId === sheet.id && !x.tokenId);
     if (e) e.init = init;
     else entries.push({ id: newItemId(), name: sheet.name, init, sheetId: sheet.id });
     this.combat.entries = sortEntries(entries, this.settings.initiativeOrder);
@@ -890,9 +925,54 @@ export class GmSession extends TableSession {
     const c = this.combatCopy();
     for (const id of ids) {
       const s = this.docs.sheets[id];
-      if (s && !c.entries.some((e) => e.sheetId === id)) c.entries.push({ id: newItemId(), name: s.name, init: 0, sheetId: id });
+      if (s && !c.entries.some((e) => e.sheetId === id && !e.tokenId)) c.entries.push({ id: newItemId(), name: s.name, init: 0, sheetId: id });
     }
     this.setCombat({ ...c, entries: sortEntries(c.entries, this.settings.initiativeOrder) });
+  }
+
+  /** Tokens de inimigo entram no combate com o próprio nome e a própria vida. */
+  combatAddTokens(ids: string[]) {
+    const c = this.combatCopy();
+    for (const id of ids) {
+      const t = this.items.get(id);
+      if (!t || t.type !== 'token' || c.entries.some((e) => e.tokenId === id)) continue;
+      c.entries.push({ id: newItemId(), name: t.name ?? 'Inimigo', init: 0, tokenId: id, ...(t.sheetId ? { sheetId: t.sheetId } : {}) });
+    }
+    this.setCombat({ ...c, entries: sortEntries(c.entries, this.settings.initiativeOrder) });
+  }
+
+  /** Menu do token: entra no combate e rola a iniciativa da ficha (em segredo). */
+  tokenToCombat(tokenId: string) {
+    const t = this.items.get(tokenId);
+    if (!t) return;
+    const sheet = t.sheetId ? this.docs.sheets[t.sheetId] : undefined;
+    // PJ e NPC entram pela ficha (um token só); inimigos entram por token.
+    if (sheet && sheet.kind !== 'monster') {
+      if (this.templateOf(sheet)?.initiative) this.doInitRoll(this.actor, sheet.id);
+      else this.combatAddSheets([sheet.id]);
+      return;
+    }
+    this.combatAddTokens([tokenId]);
+    const e = this.combat.entries.find((x) => x.tokenId === tokenId);
+    if (e) this.rollTokenInit(tokenId, e.id);
+  }
+
+  private rollTokenInit(tokenId: string, entryId: string) {
+    const t = this.items.get(tokenId);
+    const sheet = t?.sheetId ? this.docs.sheets[t.sheetId] : undefined;
+    const tpl = sheet && this.templateOf(sheet);
+    const expr = sheet && tpl?.initiative ? this.formula(this.actor, sheet, tpl.initiative) : '1d20';
+    if (!expr) return;
+    const roll = this.doRoll(this.actor, expr, true, `${t?.name ?? 'Inimigo'}: Iniciativa`);
+    if (roll) this.combatUpdate(entryId, { init: roll.total });
+  }
+
+  /** Vida própria de um token de inimigo. */
+  setTokenHp(id: string, cur: number, max: number) {
+    const t = this.items.get(id);
+    if (!t) return;
+    const m = Math.max(0, Math.round(max));
+    this.updateItem(id, { hp: { cur: Math.max(-999, Math.min(m, Math.round(cur))), max: m } });
   }
 
   combatAddManual(name: string, init: number, hidden: boolean) {
@@ -925,7 +1005,9 @@ export class GmSession extends TableSession {
     for (const e of this.combatCopy().entries) {
       const s = e.sheetId ? this.docs.sheets[e.sheetId] : undefined;
       if (s && s.kind === 'pc') continue;
-      if (s?.kind === 'npc' && this.templateOf(s)?.initiative) {
+      if (e.tokenId && s && this.templateOf(s)?.initiative) {
+        this.rollTokenInit(e.tokenId, e.id);
+      } else if (s && s.kind !== 'pc' && this.templateOf(s)?.initiative) {
         this.doInitRoll(this.actor, s.id);
       } else {
         const roll = this.doRoll(this.actor, '1d20', true, `${e.name}: Iniciativa`);
@@ -936,9 +1018,11 @@ export class GmSession extends TableSession {
 
   setSettings(settings: TableSettings) {
     const reorder = settings.initiativeOrder !== this.settings.initiativeOrder;
+    const hpChanged = !!settings.showNpcHp !== !!this.settings.showNpcHp;
     this.settings = settings;
     this.saveCampaign();
     this.broadcast({ k: 'settings', settings: $state.snapshot(this.settings) });
+    if (hpChanged) for (const i of this.items.values()) if (i.type === 'token') this.broadcastItem(i);
     if (reorder) {
       const c = this.combatCopy();
       this.setCombat({ ...c, entries: sortEntries(c.entries, settings.initiativeOrder) });
@@ -981,6 +1065,27 @@ export class GmSession extends TableSession {
       type: 'token', ...pos, w: size, h: size, perm,
       name: o.name ?? sheet?.name ?? 'Token', sheetId: sheet?.id, img: o.img, conditions: [],
     });
+  }
+
+  /**
+   * Põe a ficha no mapa. PJ e NPC têm um token só (se já existe, devolve ele);
+   * cada clique num inimigo cria um token novo, numerado e com a vida cheia.
+   */
+  placeSheet(sheetId: string, x: number, y: number): { item: BoardItem; existing: boolean } | null {
+    const sheet = this.docs.sheets[sheetId];
+    if (!sheet) return null;
+    const tokens = [...this.items.values()].filter((i) => i.type === 'token' && i.sheetId === sheetId);
+    if (sheet.kind !== 'monster') {
+      if (tokens[0]) return { item: tokens[0], existing: true };
+      return { item: this.addToken(x, y, { sheetId }), existing: false };
+    }
+    const names = new Set(tokens.map((t) => t.name));
+    let n = tokens.length + 1;
+    while (names.has(`${sheet.name} ${n}`)) n++;
+    const hp = hpOf(sheet, this.templateOf(sheet));
+    const item = this.addToken(x, y, { sheetId, name: `${sheet.name} ${n}` });
+    if (hp) this.updateItem(item.id, { hp: { cur: hp.max, max: hp.max } });
+    return { item, existing: false };
   }
 
   async setTokenImage(id: string, file: Blob) {
@@ -1057,8 +1162,10 @@ export class GmSession extends TableSession {
   // ---------- imagem do personagem ----------
 
   private receiveAvatar(actor: Actor, sheetId: string, i: number, n: number, data: string) {
+    // Só o mestre põe imagens (inclusive nas fichas dos jogadores).
+    if (actor.role !== 'gm') return this.notify(actor, 'Só o mestre muda a imagem do personagem.');
     const sheet = this.docs.sheets[sheetId];
-    if (!sheet || !this.canEditDoc(actor, sheet)) return this.notify(actor, 'Você não tem permissão para mudar esta ficha.');
+    if (!sheet) return;
     const key = `${actor.pid}:${sheetId}`;
     let p = this.avatarParts.get(key);
     if (!p || p.n !== n) {

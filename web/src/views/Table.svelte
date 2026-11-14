@@ -82,7 +82,14 @@
 
   function placeSheet(sheetId: string) {
     const c = center();
-    gm?.addToken(c.x, c.y, { sheetId });
+    const r = gm?.placeSheet(sheetId, c.x, c.y);
+    if (!r) return;
+    if (r.existing) {
+      // PJ/NPC já tem token: leva a visão até ele em vez de duplicar.
+      renderer?.focus(r.item.x + r.item.w / 2, r.item.y + r.item.h / 2, Math.max(1, c.scale));
+      renderer?.select(r.item.id);
+      gm?.toast('Esse personagem já está no mapa.');
+    }
   }
 
   async function onFile() {
@@ -163,7 +170,11 @@
             divider: true,
           });
         }
-        if (item.type === 'token') items.push({ label: '🖼️ Imagem do token…', action: () => pickTokenImage(item.id), divider: true });
+        if (item.type === 'token') {
+          items.push({ label: '🖼️ Imagem do token…', action: () => pickTokenImage(item.id), divider: true });
+          const inCombat = session.combat.entries.some((e) => e.tokenId === item.id || (!!item.sheetId && e.sheetId === item.sheetId && !e.tokenId && session.docs.sheets[item.sheetId]?.kind !== 'monster'));
+          if (!inCombat) items.push({ label: '⚔️ Entrar no combate', action: () => gm.tokenToCombat(item.id) });
+        }
         const cur = layerOf(item);
         for (const l of LAYERS) {
           if (l !== cur) items.push({ label: `↕ Mover para: ${LAYER_LABELS[l]}`, action: () => gm.setLayer(item.id, l) });

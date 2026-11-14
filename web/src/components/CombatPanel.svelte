@@ -11,9 +11,17 @@
   const mine = $derived(session.mySheets());
   const freeSheets = $derived(
     Object.values(session.docs.sheets)
-      .filter((s) => !c.entries.some((e) => e.sheetId === s.id))
+      .filter((s) => s.kind !== 'monster' && !c.entries.some((e) => e.sheetId === s.id && !e.tokenId))
       .sort((a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name)),
   );
+  /** Tokens de inimigo no mapa que ainda não estão no combate. */
+  const freeTokens = $derived.by(() => {
+    void session.itemsVersion;
+    return [...session.items.values()]
+      .filter((i) => i.type === 'token' && (!i.sheetId || session.docs.sheets[i.sheetId]?.kind === 'monster') && !c.entries.some((e) => e.tokenId === i.id))
+      .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '', undefined, { numeric: true }));
+  });
+  let pickTokens = $state<string[]>([]);
 
   let adding = $state(false);
   let pick = $state<string[]>([]);
@@ -33,17 +41,27 @@
   }
 
   function hp(e: CombatEntry) {
+    void session.itemsVersion;
+    if (e.tokenId) return session.items.get(e.tokenId)?.hp ?? null;
     const s = sheetOf(e);
     return s ? hpOf(s, session.templateOf(s)) : null;
   }
 
   function dot(e: CombatEntry) {
     const s = sheetOf(e);
-    return s?.perm.owner ? colorFor(s.perm.owner) : s?.kind === 'npc' || !s ? 'var(--accent)' : 'var(--muted)';
+    return s?.perm.owner ? colorFor(s.perm.owner) : s?.kind !== 'pc' || !s ? 'var(--accent)' : 'var(--muted)';
   }
 
   /** Dano (número positivo) ou cura (com +) aplicado na barra de vida da ficha. */
   function applyHp(e: CombatEntry, heal: boolean) {
+    const n0 = Math.abs(parseInt(dmg[e.id] ?? '', 10));
+    if (e.tokenId) {
+      const v = hp(e);
+      if (!gm || !v || !Number.isFinite(n0) || n0 === 0) return;
+      gm.setTokenHp(e.tokenId, Math.min(v.max, v.cur + (heal ? n0 : -n0)), v.max);
+      dmg[e.id] = '';
+      return;
+    }
     const s = sheetOf(e);
     const t = s && session.templateOf(s);
     const v = hp(e);
@@ -55,8 +73,10 @@
 
   function addSelected() {
     gm?.combatAddSheets(pick);
+    gm?.combatAddTokens(pickTokens);
     if (manualName.trim()) gm?.combatAddManual(manualName, manualInit, manualHidden);
     pick = [];
+    pickTokens = [];
     manualName = '';
     adding = false;
   }
@@ -124,7 +144,7 @@
           <div class="hpline">
             <div class="bar"><div style:width="{h.max > 0 ? Math.max(0, Math.min(100, (h.cur / h.max) * 100)) : 0}%"></div></div>
             <span class="hpnum">{h.cur}/{h.max}</span>
-            {#if s && canHp(s)}
+            {#if e.tokenId ? !!gm : s && canHp(s)}
               <input class="dmg" inputmode="numeric" placeholder="±" aria-label="Valor de dano ou cura" bind:value={dmg[e.id]} onkeydown={(ev) => ev.key === 'Enter' && applyHp(e, false)} />
               <button class="ghost tiny" title="Causar dano" onclick={() => applyHp(e, false)}>−</button>
               <button class="ghost tiny" title="Curar" onclick={() => applyHp(e, true)}>+</button>
@@ -156,6 +176,17 @@
             {/each}
           </div>
         {/if}
+        {#if freeTokens.length}
+          <span class="lbl">Inimigos no mapa</span>
+          <div class="picks">
+            {#each freeTokens as t (t.id)}
+              <label class="pick">
+                <input type="checkbox" checked={pickTokens.includes(t.id)} onchange={() => (pickTokens = pickTokens.includes(t.id) ? pickTokens.filter((x) => x !== t.id) : [...pickTokens, t.id])} />
+                {t.name ?? 'Token'} {#if t.hp}<span class="muted">{t.hp.cur}/{t.hp.max}</span>{/if}
+              </label>
+            {/each}
+          </div>
+        {/if}
         <span class="lbl">Ou uma criatura avulsa</span>
         <div class="row">
           <input bind:value={manualName} placeholder="Nome (ex.: Goblin 2)" maxlength="40" />
@@ -164,7 +195,7 @@
         <label class="pick"><input type="checkbox" bind:checked={manualHidden} /> Oculta dos jogadores</label>
         <div class="row end">
           <button class="ghost" onclick={() => (adding = false)}>Cancelar</button>
-          <button class="primary" onclick={addSelected} disabled={!pick.length && !manualName.trim()}>Adicionar</button>
+          <button class="primary" onclick={addSelected} disabled={!pick.length && !pickTokens.length && !manualName.trim()}>Adicionar</button>
         </div>
       </div>
     {/if}

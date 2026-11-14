@@ -118,8 +118,8 @@
     <header onpointerdown={down} onpointermove={move} onpointerup={up}>
       <button
         class="avbtn"
-        disabled={!editable}
-        title={editable ? 'Trocar a imagem do personagem' : sheet.name}
+        disabled={session.role !== 'gm'}
+        title={session.role === 'gm' ? 'Trocar a imagem do personagem' : sheet.name}
         aria-label="Imagem do personagem"
         onclick={() => avatarInput.click()}
       >
@@ -131,7 +131,7 @@
       {:else}
         <strong class="name">{sheet.name}</strong>
       {/if}
-      {#if sheet.kind === 'npc'}<span class="badge">NPC</span>{/if}
+      {#if sheet.kind === 'npc'}<span class="badge">NPC</span>{:else if sheet.kind === 'monster'}<span class="badge">Inimigo</span>{/if}
       {#if gmLocked}
         {#if unlocked}
           <button class="ghost lock on" title="Voltar a só ver" onclick={() => (unlocked = false)}>✏️ corrigindo</button>

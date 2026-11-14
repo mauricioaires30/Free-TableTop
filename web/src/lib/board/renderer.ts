@@ -686,7 +686,7 @@ export class BoardRenderer {
   private buildToken(g: Konva.Group, hud: Konva.Group, item: BoardItem, w: number, h: number) {
     const r = Math.min(w, h) / 2;
     const sheet = item.sheetId ? this.s.docs.sheets[item.sheetId] : undefined;
-    const ring = item.color ?? (sheet?.perm.owner ? colorFor(sheet.perm.owner) : sheet?.kind === 'npc' ? '#c0392b' : '#d9a75b');
+    const ring = item.color ?? (sheet?.perm.owner ? colorFor(sheet.perm.owner) : sheet && sheet.kind !== 'pc' ? '#c0392b' : '#d9a75b');
     const ringW = Math.max(3, r * 0.09);
     g.add(new Konva.Circle({ x: r, y: r, radius: r, fill: '#23262f', shadowColor: '#000', shadowBlur: 10, shadowOpacity: 0.5 }));
     const img = this.imageFor(item.img ?? sheet?.avatar);
