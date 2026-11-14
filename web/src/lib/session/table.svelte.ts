@@ -1,6 +1,6 @@
 // Estado comum da mesa (mestre e jogador) usado pela interface.
 import {
-  can, COLLECTIONS, DEFAULT_FILTER, DEFAULT_MAP, DEFAULT_SETTINGS, EMPTY_COMBAT, playerOwnsItem,
+  can, COLLECTIONS, DEFAULT_FILTER, WordFilter, DEFAULT_MAP, DEFAULT_SETTINGS, EMPTY_COMBAT, playerOwnsItem,
   type Action, type Actor, type BoardItem, type Collection, type Combat, type DocMap, type EditPatch, type FieldValue,
   type FilterConfig, type LogEntry, type Peer, type Roster, type Sheet, type SheetTemplate, type TableSettings,
   type MapSettings, type TransformPatch,
@@ -35,6 +35,15 @@ export interface Toast {
 }
 
 export const MAX_LOG = 500;
+
+const HIDE_KEY = 'ftt-esconder-palavroes';
+function readHidePref(): boolean {
+  try {
+    return localStorage.getItem(HIDE_KEY) !== '0';
+  } catch {
+    return true;
+  }
+}
 
 export type Docs = { [C in Collection]: Record<string, DocMap[C]> };
 export const emptyDocs = (): Docs => Object.fromEntries(COLLECTIONS.map((c) => [c, {}])) as Docs;
@@ -91,9 +100,26 @@ export abstract class TableSession {
     return this.roster[pid]?.name ?? this.peers.find((p) => p.pid === pid)?.name ?? 'Jogador';
   }
 
+  /** Preferência desta pessoa (fica neste navegador): esconder palavrões com ****. */
+  hideBadWords = $state(readHidePref());
+  private cleanCache: { key: string; wf: WordFilter } | null = null;
+
+  setHideBadWords(v: boolean) {
+    this.hideBadWords = v;
+    try {
+      localStorage.setItem(HIDE_KEY, v ? '1' : '0');
+    } catch {
+      /* sem armazenamento: vale só nesta aba */
+    }
+  }
+
   /** Texto como esta pessoa quer ver (palavrões escondidos ou não). */
   clean(text: string): string {
-    return text;
+    if (!this.hideBadWords || !text) return text;
+    const words = this.filter.words;
+    const key = words.join('|');
+    if (this.cleanCache?.key !== key) this.cleanCache = { key, wf: new WordFilter(words) };
+    return this.cleanCache.wf.censor(text);
   }
 
   isOnline(pid: string): boolean {

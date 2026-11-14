@@ -15,7 +15,7 @@
 
   function saveFilter() {
     const list = [...new Set(words.split('\n').map((w) => w.trim()).filter(Boolean))];
-    gm.setFilter({ enabled, mode, words: list });
+    gm.setFilter({ ...($state.snapshot(gm.filter) as typeof gm.filter), enabled, mode, words: list });
     gm.toast('Filtro de palavras atualizado.');
   }
 
@@ -218,12 +218,13 @@
     <label class="check"><input type="checkbox" bind:checked={enabled} /> Filtrar palavras pesadas no chat e no quadro</label>
     <label for="fm">Quando aparecer uma palavra da lista</label>
     <select id="fm" bind:value={mode} disabled={!enabled}>
-      <option value="censor">Censurar (troca por ****)</option>
+      <option value="user">Cada um escolhe se esconde (troca por ****)</option>
+      <option value="censor">Censurar para todos (troca por ****)</option>
       <option value="block">Bloquear a mensagem</option>
     </select>
     <label for="fw">Palavras (uma por linha)</label>
     <textarea id="fw" rows="8" bind:value={words} disabled={!enabled}></textarea>
-    <p class="muted small">Também pega variações: acentos, p0rr4, p.o.r.r.a, letras repetidas e plurais.</p>
+    <p class="muted small">Português, inglês e espanhol. Também pega variações: acentos, p0rr4, p.o.r.r.a, letras repetidas, plurais e fucking/fucker.</p>
     <div class="row">
       <button class="primary" onclick={saveFilter}>Salvar filtro</button>
       <button class="ghost" onclick={restore} disabled={!enabled}>Restaurar lista padrão</button>

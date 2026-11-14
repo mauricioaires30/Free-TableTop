@@ -26,6 +26,11 @@
     <span class="muted">{session.gmOnline ? 'online' : 'offline'}</span>
   </div>
 
+  <label class="hidebw" title="Só na sua tela: palavrões aparecem como ****">
+    <input type="checkbox" checked={session.hideBadWords} onchange={(e) => session.setHideBadWords(e.currentTarget.checked)} />
+    Esconder palavrões (só para você)
+  </label>
+
   <h3>Jogadores</h3>
   {#if players.length === 0}
     <p class="muted">Ninguém entrou ainda.{gm ? ' Mande o link de convite!' : ''}</p>
@@ -69,6 +74,14 @@
 </div>
 
 <style>
+  .hidebw {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    margin: 10px 0 4px;
+    cursor: pointer;
+  }
   .panel {
     padding: 12px;
     overflow-y: auto;

@@ -188,7 +188,7 @@
           </div>
           {#if e.label}<div class="label">{e.kind === 'table' ? '🎲 ' : ''}{e.label}</div>{/if}
           {#if e.kind === 'table'}
-            <div class="table-result">{e.text}</div>
+            <div class="table-result">{session.clean(e.text ?? "")}</div>
           {:else if e.roll}
             <RollView roll={e.roll} />
           {/if}

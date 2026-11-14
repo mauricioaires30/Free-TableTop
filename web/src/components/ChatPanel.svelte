@@ -53,7 +53,7 @@
           {#if p}<span class="tag">🔒 {p}</span>{/if}
           <span class="time">{time(e.ts)}</span>
         </div>
-        <div class="text">{e.text}</div>
+        <div class="text">{session.clean(e.text ?? "")}</div>
       </div>
     {/each}
   </div>
@@ -69,11 +69,33 @@
       />
       <button class="primary" onclick={send} disabled={!text.trim()}>Enviar</button>
     </div>
-    <p class="help muted">/w nome mensagem sussurra · /r 1d20 também rola (o resultado vai para a bandeja 🎲)</p>
+    <div class="foot">
+      <p class="help muted">/w nome mensagem sussurra · /r 1d20 também rola (o resultado vai para a bandeja 🎲)</p>
+      <label class="hide" title="Só na sua tela">
+        <input type="checkbox" checked={session.hideBadWords} onchange={(e) => session.setHideBadWords(e.currentTarget.checked)} />
+        Esconder palavrões
+      </label>
+    </div>
   </div>
 </div>
 
 <style>
+  .foot {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .hide {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    color: var(--muted);
+    white-space: nowrap;
+    cursor: pointer;
+    margin-top: 4px;
+  }
   .chat {
     display: flex;
     flex-direction: column;

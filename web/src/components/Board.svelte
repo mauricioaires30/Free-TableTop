@@ -40,6 +40,8 @@
 
   $effect(() => {
     void session.itemsVersion;
+    void session.hideBadWords;
+    void session.filter.words.length;
     untrack(() => renderer?.sync());
   });
 

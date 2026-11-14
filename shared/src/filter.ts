@@ -1,16 +1,21 @@
-// Filtro de palavras pesadas (pt-BR).
+// Filtro de palavras pesadas (português, inglês e espanhol).
 // Pega variações com acento, leetspeak (p0rr4), letras repetidas (porrrraaa)
 // e letras separadas (p.o.r.r.a / p o r r a), sem pegar palavras inocentes
 // que só contêm o termo no meio (computador, disputa, rola o dado...).
 
 export interface FilterConfig {
   enabled: boolean;
-  /** censor: troca por ****; block: a mensagem não é enviada. */
-  mode: 'censor' | 'block';
+  /**
+   * user: cada pessoa escolhe na própria tela se esconde os palavrões (padrão);
+   * censor: troca por **** para todos; block: a mensagem não é enviada.
+   */
+  mode: 'user' | 'censor' | 'block';
   words: string[];
+  /** Versão da lista padrão já incluída (para somar palavras novas em campanhas antigas). */
+  listVersion?: number;
 }
 
-export const DEFAULT_BAD_WORDS: string[] = [
+export const PT_BAD_WORDS: string[] = [
   'porra', 'caralho', 'krl', 'crl', 'puta', 'puto', 'putaria', 'pqp', 'merda', 'bosta',
   'buceta', 'boceta', 'xoxota', 'xereca', 'piroca', 'punheta', 'cu', 'cuzao', 'cuzinho',
   'foder', 'fode', 'fodeu', 'fodido', 'fodida', 'fodendo', 'foda', 'fodase', 'foda se',
@@ -20,10 +25,39 @@ export const DEFAULT_BAD_WORDS: string[] = [
   'kct', 'corno', 'babaca', 'desgracado', 'desgracada', 'otario', 'otaria', 'piranha',
 ];
 
-export const DEFAULT_FILTER: FilterConfig = { enabled: true, mode: 'censor', words: DEFAULT_BAD_WORDS };
+/** Inglês ("ass" e "dick" sozinhos ficam de fora: pegariam "as" e nomes). */
+export const EN_BAD_WORDS: string[] = [
+  'fuck', 'fck', 'fuk', 'motherfucker', 'shit', 'bullshit', 'bitch', 'asshole', 'dumbass', 'jackass', 'cunt',
+  'bastard', 'whore', 'slut', 'faggot', 'fag', 'nigger', 'nigga', 'retard', 'dickhead', 'pussy', 'twat',
+  'wanker', 'bollocks', 'cocksucker', 'wtf', 'stfu', 'gtfo', 'son of a bitch',
+];
+
+/** Espanhol. */
+export const ES_BAD_WORDS: string[] = [
+  'mierda', 'joder', 'jodido', 'jodida', 'cono', 'pendejo', 'pendeja', 'cabron', 'cabrona', 'gilipollas',
+  'hijo de puta', 'hija de puta', 'carajo', 'chingada', 'chingar', 'pinche', 'culero', 'maricon', 'verga',
+  'puta madre', 'hdp', 'ctm', 'malparido', 'malparida',
+];
+
+export const DEFAULT_BAD_WORDS: string[] = [...PT_BAD_WORDS, ...EN_BAD_WORDS, ...ES_BAD_WORDS];
+/** Sobe quando a lista padrão ganha palavras novas. */
+export const BAD_WORDS_VERSION = 2;
+
+export const DEFAULT_FILTER: FilterConfig = { enabled: true, mode: 'user', words: DEFAULT_BAD_WORDS, listVersion: BAD_WORDS_VERSION };
+
+/** Campanhas antigas: soma as palavras novas da lista padrão (sem tirar as do mestre). */
+export function upgradeFilter(cfg: FilterConfig): FilterConfig | null {
+  if ((cfg.listVersion ?? 1) >= BAD_WORDS_VERSION) return null;
+  const have = new Set(cfg.words.map(normalizeWord));
+  const add = [...EN_BAD_WORDS, ...ES_BAD_WORDS].filter((w) => !have.has(normalizeWord(w)));
+  // O antigo padrão "censurar para todos" vira "cada um escolhe".
+  return { ...cfg, mode: cfg.mode === 'censor' ? 'user' : cfg.mode, words: [...cfg.words, ...add], listVersion: BAD_WORDS_VERSION };
+}
 
 /** Sufixos tolerados depois da palavra (plural, gênero, diminutivo...). */
 const SUFFIXES = ['', 's', 'a', 'o', 'as', 'os', 'e', 'es', 'ao', 'oes', 'inho', 'inha', 'zinho', 'zinha', 'zao', 'ada', 'ado', 'udo', 'uda'];
+/** Sufixos do inglês (fucking, fucker, fucked, shitty...): só valem sobre a palavra exata. */
+const EN_SUFFIXES = ['ing', 'in', 'er', 'ers', 'ed', 'y', 'ty', 'head', 'face'];
 
 const LEET: Record<string, string> = { '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '@': 'a', '$': 's', '!': 'i' };
 
@@ -127,6 +161,11 @@ export class WordFilter {
       if (stem.length >= 3 && suf.length >= 2 && ['a', 'o', 'e'].some((v) => this.single.has(stem + v))) return true;
       if (stem.length < 3 && suf === 's' && this.single.has(stem)) return true;
     }
+    for (const suf of EN_SUFFIXES) {
+      if (!token.endsWith(suf)) continue;
+      const stem = token.slice(0, -suf.length);
+      if (stem.length >= 3 && this.single.has(stem)) return true;
+    }
     return false;
   }
 
@@ -175,7 +214,8 @@ export class WordFilter {
 export type FilterOutcome = { ok: true; text: string; censored: boolean } | { ok: false; reason: string };
 
 export function applyFilter(config: FilterConfig, text: string, filter = new WordFilter(config.words)): FilterOutcome {
-  if (!config.enabled) return { ok: true, text, censored: false };
+  // No modo "user" o texto vai como está; cada tela esconde (ou não) do seu lado.
+  if (!config.enabled || config.mode === 'user') return { ok: true, text, censored: false };
   if (!filter.check(text)) return { ok: true, text, censored: false };
   if (config.mode === 'block') return { ok: false, reason: 'Mensagem bloqueada pelo filtro de palavras da mesa.' };
   return { ok: true, text: filter.censor(text), censored: true };

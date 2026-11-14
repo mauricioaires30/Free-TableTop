@@ -38,7 +38,7 @@
     if (doc && editable && !doc.text) editing = true;
   });
 
-  const html = $derived(doc ? renderNote(doc.text, (t) => !!session.wikiByTitle(t)) : '');
+  const html = $derived(doc ? renderNote(session.clean(doc.text), (t) => !!session.wikiByTitle(t)) : '');
 
   const start = Math.min(index, 6);
   let pos = $state({ x: 120 + start * 32, y: 80 + start * 28 });
@@ -93,7 +93,7 @@
       {#if editable}
         <LiveInput class="title" value={doc.title} maxlength={120} label="Título" onCommit={(v) => session.editNote(col, id, { title: String(v) })} />
       {:else}
-        <strong class="title">{doc.title}</strong>
+        <strong class="title">{session.clean(doc.title)}</strong>
       {/if}
       {#if editable}
         <button class="ghost icon" title={editing ? 'Ver' : 'Editar'} onclick={() => (editing = !editing)}>{editing ? '👁' : '✏️'}</button>

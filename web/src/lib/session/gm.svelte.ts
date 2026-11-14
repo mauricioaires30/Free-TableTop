@@ -6,7 +6,7 @@ import {
   resolveFormula, rollDice, sanitizeValues, SHEET_PERM, sortEntries, stepTurn, TEMPLATE_PERM, TEMPLATE_PRESETS,
   TRANSFORM_FIELDS, WordFilter, DEFAULT_TABLES, TABLE_PERM, NOTE_PERM, rollTable as rollRandomTable, logToJournal,
   MAX_NOTE_TEXT, AVATAR_SIDE, MAX_AVATAR_BYTES, playerOwnsItem, templateAttrs, creaturePreset, presetTemplate, migrateTemplate,
-  attributesUsedBy, fieldIdFromLabel, type Preset, hpOf, isPlayerSheet,
+  attributesUsedBy, fieldIdFromLabel, type Preset, hpOf, isPlayerSheet, upgradeFilter,
   type Actor, type AnyDoc, type BoardItem, type Collection, type Combat, type CombatEntry, type DocMap,
   type EditPatch, type FieldValue, type FilterConfig, type GmMessage, type LogEntry, type Peer, type Perm,
   type PlayerIntent, type RelayToClient, type Roster, type Sheet, type SheetTemplate, type TableSettings,
@@ -67,6 +67,8 @@ export class GmSession extends TableSession {
     const combat = await readCombat(store);
     const map = await readMap(store);
     const s = new GmSession(store, campaign, items, recent, today, docs, combat, map);
+    const f = upgradeFilter(campaign.filter);
+    if (f) s.setFilter(f);
     if (!campaign.seeded) s.seedTemplates(campaign.system);
     else s.migrate();
     if (!campaign.seededTables) s.seedTables();
